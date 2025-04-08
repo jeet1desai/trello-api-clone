@@ -8,11 +8,7 @@ import { loginSchema, signupSchema } from '../schemas/auth.schema';
 import Joi from 'joi';
 import jwt from 'jsonwebtoken';
 
-const Signup: RequestHandler = async (
-  request: Request,
-  response: Response,
-  next: NextFunction
-): Promise<void> => {
+const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     await validateRequest(request.body, signupSchema);
     const reqBody = await request.body;
@@ -20,12 +16,7 @@ const Signup: RequestHandler = async (
     const user = await User.findOne({ email });
 
     if (user) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        'User already exists..!'
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User already exists..!');
       return;
     }
     const salt = await bcryptJS.genSalt(10);
@@ -35,32 +26,17 @@ const Signup: RequestHandler = async (
       password: hashedPassword,
     };
     const userCreated = await User.create(newUser);
-    APIResponse(
-      response,
-      true,
-      HttpStatusCode.CREATED,
-      'User successfully registered..!',
-      userCreated
-    );
+    APIResponse(response, true, HttpStatusCode.CREATED, 'User successfully registered..!', userCreated);
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        error.details[0].message
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
     } else {
       return next(error);
     }
   }
 };
 
-const Signin: RequestHandler = async (
-  request: Request,
-  response: Response,
-  next: NextFunction
-): Promise<void> => {
+const Signin: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     const reqBody = await request.body;
     await validateRequest(reqBody, loginSchema);
@@ -68,12 +44,7 @@ const Signin: RequestHandler = async (
     const user = await User.findOne({ email });
 
     if (!user) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        'User not found..!'
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
       return;
     }
     const validatePassword = await bcryptJS.compare(password, user.password);
@@ -95,12 +66,7 @@ const Signin: RequestHandler = async (
     APIResponse(response, true, 200, 'Login successfull', { user, token });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        error.details[0].message
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
     } else {
       return next(error);
     }

@@ -31,10 +31,7 @@ export const badRequestError = (message: string): CustomError => ({
   statusCode: StatusCodes.BAD_REQUEST,
 });
 
-export const validationError = (
-  message: string,
-  errors: any[]
-): CustomError => ({
+export const validationError = (message: string, errors: any[]): CustomError => ({
   message,
   status: 'error',
   statusCode: StatusCodes.BAD_REQUEST,
@@ -42,11 +39,5 @@ export const validationError = (
 });
 
 export const isCustomError = (error: unknown): error is CustomError => {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    'status' in error &&
-    'statusCode' in error
-  );
+  return typeof error === 'object' && error !== null && 'message' in error && 'status' in error && 'statusCode' in error;
 };
