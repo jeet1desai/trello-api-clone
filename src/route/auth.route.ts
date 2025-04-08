@@ -1,5 +1,5 @@
 import express from 'express';
-const Authrouter = express.Router();
+const authRouter = express.Router();
 import authController from '../controller/auth.controller';
 const { celebrate, Joi, errors, Segments } = require('celebrate');
 
@@ -8,8 +8,8 @@ const upload = multer();
 
 const { Signup, Signin, RefreshToken } = authController;
 
-Authrouter.route('/signup').post(upload.single('profile_image'), Signup);
-Authrouter.route('/signin').post(Signin);
-Authrouter.route('/refresh-token').post(RefreshToken);
+authRouter.route('/signup').post(upload.single('profile_image'), Signup);
+authRouter.route('/signin').post(Signin);
+authRouter.route('/refresh-token').post(RefreshToken);
 
-export default Authrouter;
+export default authRouter;

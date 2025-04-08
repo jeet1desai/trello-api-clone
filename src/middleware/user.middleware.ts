@@ -3,6 +3,7 @@ import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
+import User from '../model/user.model';
 
 type GenerateJwtTokenType = {
   data: string | object | Buffer;
@@ -10,7 +11,7 @@ type GenerateJwtTokenType = {
 };
 
 const jwtVerify = (token: string) => {
-  return jwt.verify(token, process.env.JWT_KEY!);
+  return jwt.verify(token, process.env.TOKEN_PRIVATE_KEY as string);
 };
 
 const generateJwtToken = ({ data, expires }: GenerateJwtTokenType) => {
@@ -20,7 +21,7 @@ const generateJwtToken = ({ data, expires }: GenerateJwtTokenType) => {
     options.expiresIn = expires as SignOptions['expiresIn'];
   }
 
-  return jwt.sign(data, process.env.JWT_KEY!, options);
+  return jwt.sign(data, process.env.TOKEN_PRIVATE_KEY as string, options);
 };
 
 const refetchToken = async (token: string) => {
@@ -39,65 +40,63 @@ export default async (req: express.Request, res: express.Response, next: express
   const refreshToken = req?.cookies?.refresh_token || '';
 
   try {
-    console.log(accessToken);
-
-    // if (!accessToken) throw { status: 401, message: 'No auth token provided' };
     if (!accessToken) {
       APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'No auth token provided', null);
     }
 
-    console.log('Proceeding with JWT token');
-
     const decoded: any = jwtVerify(accessToken);
-
-    if (!decoded) throw { status: 401, message: 'Invalid access token' };
+    if (!decoded) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Invalid access token', null);
+    }
 
     const { _id } = decoded;
-
-    // const user = await findUserById(_id);
-    const user = { _id };
-
-    if (!user) throw { status: 401, message: 'Un-authorized' };
+    const user = await User.findById(_id);
+    if (!user) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+    }
 
     // @ts-expect-error
     req.user = user;
-
     return next();
   } catch (err: any) {
-    // try {
-    //   if (err.message.includes('jwt expired') && accessToken.length < 500 && refreshToken) {
-    //     // re generate access token
-    //     console.log('Re-Fetch Jwt');
-    //     const { accessToken: newAccessToken, _id } = await refetchToken(refreshToken).catch((err) => {
-    //       throw err;
-    //     });
-    //     // const userFound = await findUserById(_id);
-    //     const user = { _id };
-    //     if (!user) throw { status: 401, message: 'Un-authorized' };
-    //     res.cookie('access_token', newAccessToken, COOKIE_OPTIONS);
-    //     // @ts-expect-error
-    //     req.user = user;
-    //     return next();
-    //   } else if (err.message.includes('Token used too late')) {
-    //     throw { status: 401, message: 'Un-authorized' };
-    //   } else if (err.message.includes('jwt expired')) {
-    //     throw { status: 401, message: 'Un-authorized' };
-    //   } else {
-    //     console.error(err);
-    //     next(err);
-    //   }
-    // } catch (err: any) {
-    //   try {
-    //     if (err.message.includes('Token used too late')) throw { status: 401, message: 'Un-authorized' };
-    //     else if (err.message.includes('jwt expired')) throw { status: 401, message: 'Un-authorized' };
-    //     else {
-    //       console.error(err);
-    //       next(err);
-    //     }
-    //   } catch (err: any) {
-    //     console.error(err);
-    //     next(err);
-    //   }
-    // }
+    try {
+      if (err.message.includes('jwt expired') && accessToken.length < 500 && refreshToken) {
+        // re generate access token
+        const { accessToken: newAccessToken, _id } = await refetchToken(refreshToken).catch((err) => {
+          throw err;
+        });
+
+        const user = await User.findById(_id);
+        if (!user) {
+          APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+        }
+        res.cookie('access_token', newAccessToken, COOKIE_OPTIONS);
+
+        // @ts-expect-error
+        req.user = user;
+        return next();
+      } else if (err.message.includes('Token used too late')) {
+        APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+      } else if (err.message.includes('jwt expired')) {
+        APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'jwt expired', null);
+      } else {
+        console.error(err);
+        next(err);
+      }
+    } catch (err: any) {
+      try {
+        if (err.message.includes('Token used too late')) {
+          APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+        } else if (err.message.includes('jwt expired')) {
+          APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+        } else {
+          console.error(err);
+          next(err);
+        }
+      } catch (err: any) {
+        console.error(err);
+        next(err);
+      }
+    }
   }
 };

@@ -1,12 +1,73 @@
 import { API_URL, server } from '../setup';
 import { expect } from 'chai';
 import sinon from 'sinon';
+import jwt from 'jsonwebtoken';
 import { WorkSpaceModel } from '../../src/model/workspace.model';
+import User from '../../src/model/user.model';
+import request from 'supertest';
+import app from '../../src/server';
 
 describe('Workspace API', () => {
+  beforeEach(() => {
+    sinon.stub(jwt, 'verify').returns({ _id: 'test-user-id', email: 'test@example.com' } as any);
+    sinon.stub(User, 'findById').resolves({ _id: 'test-user-id', email: 'test@example.com' } as any);
+  });
+
   afterEach(() => {
     sinon.restore(); // Clean stubs after each test
   });
+
+  // describe('Auth Middleware', () => {
+  //   afterEach(() => {
+  //     sinon.restore();
+  //   });
+
+  //   it('should allow request with valid token', async () => {
+  //     const fakeUser = { _id: 'user-id', email: 'test@example.com' };
+
+  //     sinon.stub(jwt, 'verify').returns({ _id: 'user-id', email: 'test@example.com' } as any);
+  //     sinon.stub(User, 'findById').resolves(fakeUser);
+
+  //     const res = await request(app)
+  //       .get('/v1/api/your-protected-route') // change to actual route
+  //       .set('Cookie', ['access_token=fake-token']); // simulate cookie
+
+  //     expect(res.status).to.not.equal(401);
+  //   });
+
+  //   it('should return 401 if access token is missing', async () => {
+  //     const res = await request(app).get('/v1/api/your-protected-route');
+
+  //     expect(res.status).to.equal(401);
+  //     expect(res.body.message).to.equal('No auth token provided');
+  //   });
+
+  //   it('should return 401 for invalid token', async () => {
+  //     sinon.stub(jwt, 'verify').throws(new Error('invalid token'));
+
+  //     const res = await request(app).get('/v1/api/your-protected-route').set('Cookie', ['access_token=invalid-token']);
+
+  //     expect(res.status).to.equal(401);
+  //   });
+
+  //   it('should refresh token if access token is expired and refresh is valid', async () => {
+  //     sinon
+  //       .stub(jwt, 'verify')
+  //       .onFirstCall()
+  //       .throws(new Error('jwt expired'))
+  //       .onSecondCall()
+  //       .returns({ _id: 'user-id', email: 'test@example.com' } as any);
+
+  //     sinon.stub(User, 'findById').resolves({ _id: 'user-id', email: 'test@example.com' });
+  //     sinon.stub(jwt, 'sign').returns('new-access-token' as any);
+
+  //     const res = await request(app)
+  //       .get('/v1/api/your-protected-route')
+  //       .set('Cookie', ['access_token=expired-token', 'refresh_token=valid-refresh-token']);
+
+  //     expect(res.status).to.not.equal(401);
+  //   });
+  // });
 
   describe('POST /create-workspace', async () => {
     it('should create a workspace successfully', (done) => {
@@ -22,6 +83,7 @@ describe('Workspace API', () => {
 
       server
         .post(`${API_URL}/workspace/create-workspace`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .send({
           name: 'Test Workspace',
           description: 'Test workspace description',
@@ -41,6 +103,7 @@ describe('Workspace API', () => {
 
       server
         .post(`${API_URL}/workspace/create-workspace`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .send({
           name: 'Test Workspace',
           description: 'Test workspace description',
@@ -68,6 +131,7 @@ describe('Workspace API', () => {
 
       server
         .put(`${API_URL}/workspace/update-workspace/67f4e6d9688da016b404959f`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .send({
           name: 'Test Workspace Updated',
           description: 'Test workspace description Updated',
@@ -87,6 +151,7 @@ describe('Workspace API', () => {
 
       server
         .put(`${API_URL}/workspace/update-workspace/67f4e6d9688da016b404959g`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .send({
           name: 'Test Workspace Updated',
           description: 'Test workspace description Updated',
@@ -102,6 +167,7 @@ describe('Workspace API', () => {
 
       server
         .put(`${API_URL}/workspace/update-workspace/invalid-id`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .send({
           name: 'Test Workspace Updated',
           description: 'Test workspace description Updated',
@@ -125,6 +191,7 @@ describe('Workspace API', () => {
 
       server
         .delete(`${API_URL}/workspace/delete-workspace/workspace123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(200)
         .end((err, res) => {
           expect(res.body.success).to.be.true;
@@ -139,6 +206,7 @@ describe('Workspace API', () => {
 
       server
         .delete(`${API_URL}/workspace/delete-workspace/workspace123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(502)
         .end((err, res) => {
           expect(res.body.success).to.be.false;
@@ -152,6 +220,7 @@ describe('Workspace API', () => {
 
       server
         .delete(`${API_URL}/workspace/delete-workspace/invalid-id`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(404)
         .end((err, res) => {
           expect(res.body.success).to.be.false;
@@ -171,6 +240,7 @@ describe('Workspace API', () => {
 
       server
         .get(`${API_URL}/workspace/get-workspace/workspace123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(200)
         .end((err, res) => {
           expect(res.body.success).to.be.true;
@@ -185,6 +255,7 @@ describe('Workspace API', () => {
 
       server
         .get(`${API_URL}/workspace/get-workspace/invalid-id`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(404)
         .end((err, res) => {
           expect(res.body.success).to.be.false;
@@ -198,6 +269,7 @@ describe('Workspace API', () => {
 
       server
         .get(`${API_URL}/workspace/get-workspace/workspace123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(502)
         .end((err, res) => {
           expect(res.body.success).to.be.false;
