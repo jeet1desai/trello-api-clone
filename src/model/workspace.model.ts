@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 export interface WorkspaceModelType {
-  _id: mongoose.Schema.Types.ObjectId;
+  _id?: mongoose.Schema.Types.ObjectId;
   name: string;
   description: string;
   createdBy: mongoose.Schema.Types.ObjectId;

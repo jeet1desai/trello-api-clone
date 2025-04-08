@@ -7,9 +7,5 @@ export const validateCreateWorkspace = celebrate({
       'any.required': `Workspace name is required`,
     }),
     description: Joi.string().allow('').optional(),
-    createdBy: Joi.string().hex().required().messages({
-      'string.base': `createdBy must be a valid user ID`,
-      'any.required': `createdBy is required`,
-    }),
   }),
 });

@@ -1,20 +1,9 @@
 import { Response } from 'express';
 
-const APIResponse = <T>(
-  resp: Response,
-  status: boolean,
-  statusCode: number,
-  message: string,
-  data?: T | undefined,
-  dataEncrypted?: string
-) => {
-  const response: {
-    status: boolean;
-    message: string;
-    data?: T;
-    dataEncrypted?: string;
-  } = {
-    status,
+const APIResponse = <T>(resp: Response, status: boolean, statusCode: number, message: string, data?: T | undefined, dataEncrypted?: string) => {
+  const response: { success: boolean; status: number; message: string; data?: T; dataEncrypted?: string } = {
+    success: status,
+    status: statusCode,
     message,
   };
   if (data) {

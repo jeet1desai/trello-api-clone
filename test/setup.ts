@@ -1,3 +1,5 @@
+/// <reference types="mocha" />
+
 import supertest from 'supertest';
 import chai from 'chai';
 import sinonChai from 'sinon-chai';
@@ -8,4 +10,4 @@ export const { expect } = chai;
 export const server = supertest.agent(app);
 
 export const BASE_URL = '/';
-export const API_URL = '/api/v1';
+export const API_URL = '/v1/api';
