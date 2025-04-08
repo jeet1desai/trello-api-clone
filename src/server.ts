@@ -11,7 +11,9 @@ dotenv.config();
 
 connectToDB();
 const app: Express = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3030;
+
+connectToDB();
 
 app.use(morgan('dev'));
 app.use(helmet());
@@ -19,15 +21,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/v1/api', routes);
-
-app.use(notFound);
-app.use(errorHandler);
-
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({ test: 'Express + TypeScript Server' });
 });
+
+app.use('/v1/api', routes);
+app.use(notFound);
+app.use(errorHandler);
 
 app.listen(port, () => {
   console.log(`[server]: Server is running at http://localhost:${port}`);
 });
+
+export default app;

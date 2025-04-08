@@ -24,3 +24,7 @@ logs
 
 # Environment variables
 .env*
+
+# Test case
+.nyc_output/
+coverage/
