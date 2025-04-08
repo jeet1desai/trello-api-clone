@@ -1,5 +1,5 @@
 import express from 'express';
-import { validateCreateWorkspace } from '../validators/workspace';
+import { validateCreateWorkspace } from '../schemas/workspace.schema';
 import {
   createWorkSpaceController,
   deleteWorkSpaceController,

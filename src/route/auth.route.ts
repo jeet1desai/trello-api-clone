@@ -1,11 +1,14 @@
 import express from 'express';
-const router = express.Router();
+const Authrouter = express.Router();
 import authController from '../controller/auth.controller';
+const { celebrate, Joi, errors, Segments } = require('celebrate');
+
 import multer from 'multer';
 const upload = multer();
 
-const { Signup } = authController;
+const { Signup, Signin } = authController;
 
-router.post('/signup', upload.single('profile_image'), Signup);
+Authrouter.route('/signup').post(upload.single('profile_image'), Signup);
+Authrouter.route('/signin').post(Signin);
 
-export default router;
+export default Authrouter;
