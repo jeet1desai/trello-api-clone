@@ -1,0 +1,27 @@
+### Register a new user
+@baseUrl = http://localhost:3001/v1/api
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+    "name": "test",
+    "email": "test@test.com",
+    "password": "test"  
+}
+
+### Login a user
+POST {{baseUrl}}/auth/signin
+Content-Type: application/json
+
+{
+    "email": "test@test.com",
+    "password": "test"
+}
+
+### Logout a user
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+{
+    "email": "test@test.com"
+}

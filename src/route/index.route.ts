@@ -1,10 +1,14 @@
-import express from 'express';
-const router = express.Router();
-
+import { Application } from 'express';
 import workspaceRouter from './workspace.route';
 import authRouter from './auth.route';
 
-router.use('/auth', authRouter);
-router.use('/workspace', workspaceRouter);
+const BASE_PATH = '/v1/api';
 
-export default router;
+export default (app: Application) => {
+    const routes = () => {
+        app.use(`${BASE_PATH}/auth`, authRouter);
+        app.use(`${BASE_PATH}/workspace`, workspaceRouter);
+    };
+    routes();
+} 
+
