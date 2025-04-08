@@ -9,11 +9,8 @@ import { connectToDB } from './config/mongoose';
 
 dotenv.config();
 
-connectToDB();
 const app: Express = express();
 const port = process.env.PORT || 3030;
-
-connectToDB();
 
 app.use(morgan('dev'));
 app.use(helmet());
@@ -31,6 +28,7 @@ app.use(errorHandler);
 
 app.listen(port, () => {
   console.log(`[server]: Server is running at http://localhost:${port}`);
+  connectToDB();
 });
 
 export default app;
