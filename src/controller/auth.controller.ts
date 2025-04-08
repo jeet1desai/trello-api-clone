@@ -4,25 +4,15 @@ import User from '../model/user.model';
 import bcryptJS from 'bcryptjs';
 import { HttpStatusCode } from '../helper/enum';
 import { validateRequest } from '../utils/validation.utils';
-import {
-  loginSchema,
-  refreshTokenSchema,
-  signupSchema,
-} from '../schemas/auth.schema';
+import { loginSchema, refreshTokenSchema, signupSchema } from '../schemas/auth.schema';
 import Joi from 'joi';
 import generateTokens from '../utils/generateTokens';
-import verifyRefreshToken, {
-  VerifyRefreshTokenResponse,
-} from '../utils/verifyRefreshToken';
+import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyRefreshToken';
 import jwt from 'jsonwebtoken';
 import { accessTokenExpireTime } from '../helper/constant';
 import { sendEmail } from '../utils/sendEmail';
 
-const Signup: RequestHandler = async (
-  request: Request,
-  response: Response,
-  next: NextFunction
-): Promise<void> => {
+const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     await validateRequest(request.body, signupSchema);
     const reqBody = await request.body;
@@ -30,12 +20,7 @@ const Signup: RequestHandler = async (
     const user = await User.findOne({ email });
 
     if (user) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        'User already exists..!'
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User already exists..!');
       return;
     }
     const salt = await bcryptJS.genSalt(10);
@@ -45,50 +30,17 @@ const Signup: RequestHandler = async (
       password: hashedPassword,
     };
     const userCreated = await User.create(newUser);
-    if (!userCreated) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        'Something went wrong..!'
-      );
-      return;
-    }
-
-    const mailOptions = {
-      to: email,
-      subject: 'Verify you email',
-      html: 'please verfy your email',
-    };
-
-    await sendEmail(mailOptions);
-
-    APIResponse(
-      response,
-      true,
-      HttpStatusCode.CREATED,
-      'User successfully registered..!',
-      userCreated
-    );
+    APIResponse(response, true, HttpStatusCode.CREATED, 'User successfully registered..!', userCreated);
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        error.details[0].message
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
     } else {
       return next(error);
     }
   }
 };
 
-const Signin: RequestHandler = async (
-  request: Request,
-  response: Response,
-  next: NextFunction
-): Promise<void> => {
+const Signin: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     const reqBody = await request.body;
     await validateRequest(reqBody, loginSchema);
@@ -96,12 +48,7 @@ const Signin: RequestHandler = async (
     const user = await User.findOne({ email });
 
     if (!user) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        'User not found..!'
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
       return;
     }
     const validatePassword = await bcryptJS.compare(password, user.password);
@@ -125,49 +72,29 @@ const Signin: RequestHandler = async (
     });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        error.details[0].message
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
     } else {
       return next(error);
     }
   }
 };
 
-const RefreshToken: RequestHandler = async (
-  request: Request,
-  response: Response,
-  next: NextFunction
-): Promise<void> => {
+const RefreshToken: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     const reqBody = await request.body;
     await validateRequest(reqBody, refreshTokenSchema);
-    const verifyToken: VerifyRefreshTokenResponse = await verifyRefreshToken(
-      reqBody.refreshToken
-    );
+    const verifyToken: VerifyRefreshTokenResponse = await verifyRefreshToken(reqBody.refreshToken);
     const payload = {
       _id: verifyToken.tokenDetails._id,
       email: verifyToken.tokenDetails.email,
     };
-    const accessToken = jwt.sign(
-      payload,
-      process.env.ACCESS_TOKEN_PRIVATE_KEY as string,
-      { expiresIn: accessTokenExpireTime }
-    );
+    const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_PRIVATE_KEY as string, { expiresIn: accessTokenExpireTime });
     APIResponse(response, true, 200, 'Access token created successfully', {
       accessToken,
     });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
-      APIResponse(
-        response,
-        false,
-        HttpStatusCode.BAD_REQUEST,
-        error.details[0].message
-      );
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
     } else {
       return next(error);
     }
