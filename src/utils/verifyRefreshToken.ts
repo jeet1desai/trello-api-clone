@@ -15,7 +15,7 @@ export interface VerifyRefreshTokenResponse {
 }
 
 const verifyRefreshToken = async (refreshToken: string) => {
-  const privateKey: string | undefined = process.env.REFRESH_TOKEN_PRIVATE_KEY;
+  const privateKey: string | undefined = process.env.TOKEN_PRIVATE_KEY;
 
   try {
     const doc = await UserToken.findOne({ token: refreshToken });

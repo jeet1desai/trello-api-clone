@@ -7,6 +7,6 @@ export const COOKIE_OPTIONS: express.CookieOptions = {
 };
 
 export const TOKEN_EXP = {
-  access_token: '20s',
-  refresh_token: '10m',
+  access_token: '15m',
+  refresh_token: '30d',
 };
