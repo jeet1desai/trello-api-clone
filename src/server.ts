@@ -5,9 +5,11 @@ import helmet from 'helmet';
 import cors from 'cors';
 import routes from './route/index.route';
 import { notFound, errorHandler } from './middleware/logger';
+import { connectToDB } from './config/mongoose';
 
 dotenv.config();
 
+connectToDB();
 const app: Express = express();
 const port = process.env.PORT || 3001;
 

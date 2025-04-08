@@ -1,5 +1,6 @@
 import { Request, Response, RequestHandler } from 'express';
 import APIResponse from '../helper/apiResponse';
+import { HttpStatusCode } from '../helper/enum';
 
 const GetTestData: RequestHandler = async (
   request: Request,
@@ -10,7 +11,12 @@ const GetTestData: RequestHandler = async (
     APIResponse(response, true, 200, 'Test data fetched successfully', test);
   } catch (error: unknown) {
     console.log('Error - GetTestData', error);
-    APIResponse(response, false, 500, 'SOmething went wrong');
+    APIResponse(
+      response,
+      false,
+      HttpStatusCode.BAD_GATEWAY,
+      'SOmething went wrong'
+    );
   }
 };
 
