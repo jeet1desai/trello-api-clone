@@ -1,8 +1,9 @@
 import morgan from "morgan";
 import helmet from "helmet";
 import cors from "cors";
+import cookieParser from 'cookie-parser';
 import { createLogger } from "../utils/Logger";
-import express, { Express, json, urlencoded } from 'express';
+import { Express, json, urlencoded } from 'express';
 import compression from 'compression';
 let log = createLogger('standardMiddleware');  
 
@@ -45,7 +46,7 @@ const runStandardMiddleware = (app: Express) => {
         exposedHeaders: ["Content-Range", "X-Content-Range"]
       })
     );
-
+    app.use(cookieParser());
     app.use(compression());
     app.use(json({ limit: "50mb" }));
     app.use(urlencoded({ extended: true, limit: "50mb" }));
