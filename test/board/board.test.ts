@@ -264,4 +264,38 @@ describe('Board API', () => {
       expect(res.body.data.name).to.equal('Sprint 1'); // from stubbed board
     });
   });
+
+  describe('DELETE /delete-board/:id', async () => {
+    it('should delete a board and its members and invites', async () => {
+      sinon.stub(BoardModel, 'findByIdAndDelete').resolves(mockBoard as any);
+      sinon.stub(MemberModel, 'deleteMany').resolves({ deletedCount: 2 } as any);
+      sinon.stub(BoardInviteModel, 'deleteMany').resolves({ deletedCount: 1 } as any);
+
+      const res = await server.delete(`${API_URL}/board/delete-board/${mockBoard._id}`).set('Cookie', [`access_token=token`]);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+      expect(res.body.message).to.equal('Board successfully deleted');
+    });
+
+    it('should return 404 if board not found', async () => {
+      sinon.stub(BoardModel, 'findByIdAndDelete').resolves(null);
+
+      const res = await server.delete(`${API_URL}/board/delete-board/${mockBoard._id}`).set('Cookie', ['access_token=token']);
+
+      expect(res.status).to.equal(404);
+      expect(res.body.success).to.be.false;
+      expect(res.body.message).to.equal('Board not found');
+    });
+
+    it('should handle internal server errors gracefully', async () => {
+      sinon.stub(BoardModel, 'findByIdAndDelete').throws(new Error('Something went wrong'));
+
+      const res = await server.delete(`${API_URL}/board/delete-board/${mockBoard._id}`).set('Cookie', ['access_token=token']);
+
+      expect(res.status).to.equal(502);
+      expect(res.body.success).to.be.false;
+      expect(res.body.message).to.equal('Something went wrong');
+    });
+  });
 });

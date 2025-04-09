@@ -28,6 +28,9 @@ export const createBoardController = async (req: express.Request, res: express.R
 
     const workspaceDetails = await WorkSpaceModel.findById({ _id: workspace });
     if (!workspaceDetails) {
+      await session.abortTransaction();
+      session.endSession();
+
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
@@ -203,6 +206,40 @@ export const updateBoardController = async (req: express.Request, res: express.R
 
     APIResponse(res, true, HttpStatusCode.OK, 'Board successfully updated', board);
   } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const deleteBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const board = await BoardModel.findByIdAndDelete({ _id: id }, { session });
+
+    if (!board) {
+      await session.abortTransaction();
+      session.endSession();
+
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
+      return;
+    }
+
+    await MemberModel.deleteMany({ boardId: id }, { session });
+
+    await BoardInviteModel.deleteMany({ boardId: id }, { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Board successfully deleted', board);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
