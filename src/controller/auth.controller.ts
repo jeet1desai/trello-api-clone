@@ -9,7 +9,6 @@ import Joi from 'joi';
 import generateTokens from '../utils/generateTokens';
 import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyRefreshToken';
 import jwt from 'jsonwebtoken';
-import { emailVeirficationTokenExpireTime } from '../helper/constant';
 import { sendEmail } from '../utils/sendEmail';
 const ejs = require('ejs');
 import { TOKEN_EXP } from '../config/app.config';
@@ -37,7 +36,7 @@ const Signup: RequestHandler = async (request: Request, response: Response, next
       return;
     }
     const token = jwt.sign({ userId: userCreated._id }, process.env.EMAIL_VERIFY_TOKEN!, {
-      expiresIn: emailVeirficationTokenExpireTime,
+      expiresIn: TOKEN_EXP.email_token as any,
     });
     userCreated.email_token = token;
     userCreated.email_token_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -169,7 +168,7 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
       }
 
       const newToken = jwt.sign({ userId: user._id }, process.env.EMAIL_VERIFY_TOKEN!, {
-        expiresIn: emailVeirficationTokenExpireTime,
+        expiresIn: TOKEN_EXP.email_token as any,
       });
 
       user.email_token = newToken;

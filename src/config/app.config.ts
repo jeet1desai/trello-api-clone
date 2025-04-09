@@ -9,4 +9,5 @@ export const COOKIE_OPTIONS: express.CookieOptions = {
 export const TOKEN_EXP = {
   access_token: '15m',
   refresh_token: '30d',
+  email_token: '1d',
 };
