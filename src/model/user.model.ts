@@ -27,6 +27,17 @@ const userSchema = new mongoose.Schema(
     profile_image: {
       type: String,
     },
+    email_token: {
+      type: String,
+    },
+    email_token_expires_at: {
+      type: Date,
+    },
+    is_email_verified: {
+      type: Boolean,
+      default: false,
+    },
+    status: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
