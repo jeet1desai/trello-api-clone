@@ -4,8 +4,6 @@ import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
 import { WorkSpaceModel } from '../../src/model/workspace.model';
 import User from '../../src/model/user.model';
-import request from 'supertest';
-import app from '../../src/server';
 
 describe('Workspace API', () => {
   beforeEach(() => {
@@ -16,58 +14,6 @@ describe('Workspace API', () => {
   afterEach(() => {
     sinon.restore(); // Clean stubs after each test
   });
-
-  // describe('Auth Middleware', () => {
-  //   afterEach(() => {
-  //     sinon.restore();
-  //   });
-
-  //   it('should allow request with valid token', async () => {
-  //     const fakeUser = { _id: 'user-id', email: 'test@example.com' };
-
-  //     sinon.stub(jwt, 'verify').returns({ _id: 'user-id', email: 'test@example.com' } as any);
-  //     sinon.stub(User, 'findById').resolves(fakeUser);
-
-  //     const res = await request(app)
-  //       .get('/v1/api/your-protected-route') // change to actual route
-  //       .set('Cookie', ['access_token=fake-token']); // simulate cookie
-
-  //     expect(res.status).to.not.equal(401);
-  //   });
-
-  //   it('should return 401 if access token is missing', async () => {
-  //     const res = await request(app).get('/v1/api/your-protected-route');
-
-  //     expect(res.status).to.equal(401);
-  //     expect(res.body.message).to.equal('No auth token provided');
-  //   });
-
-  //   it('should return 401 for invalid token', async () => {
-  //     sinon.stub(jwt, 'verify').throws(new Error('invalid token'));
-
-  //     const res = await request(app).get('/v1/api/your-protected-route').set('Cookie', ['access_token=invalid-token']);
-
-  //     expect(res.status).to.equal(401);
-  //   });
-
-  //   it('should refresh token if access token is expired and refresh is valid', async () => {
-  //     sinon
-  //       .stub(jwt, 'verify')
-  //       .onFirstCall()
-  //       .throws(new Error('jwt expired'))
-  //       .onSecondCall()
-  //       .returns({ _id: 'user-id', email: 'test@example.com' } as any);
-
-  //     sinon.stub(User, 'findById').resolves({ _id: 'user-id', email: 'test@example.com' });
-  //     sinon.stub(jwt, 'sign').returns('new-access-token' as any);
-
-  //     const res = await request(app)
-  //       .get('/v1/api/your-protected-route')
-  //       .set('Cookie', ['access_token=expired-token', 'refresh_token=valid-refresh-token']);
-
-  //     expect(res.status).to.not.equal(401);
-  //   });
-  // });
 
   describe('POST /create-workspace', async () => {
     it('should create a workspace successfully', (done) => {
@@ -112,6 +58,22 @@ describe('Workspace API', () => {
         .end((err, res) => {
           expect(res.body.success).to.be.false;
           expect(res.body.message).to.equal('DB Error');
+          done();
+        });
+    });
+
+    it('should return validation error if name is missing', (done) => {
+      server
+        .post(`${API_URL}/workspace/create-workspace`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .send({
+          // name is missing, which is required
+          description: 'Test workspace description',
+        })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Workspace name is required');
           done();
         });
     });

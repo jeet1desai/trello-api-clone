@@ -31,7 +31,6 @@ export async function connectToDB() {
       await mongoose.connection.close();
       process.exit(0);
     });
-
   } catch (error) {
     log.error('Error connecting to MongoDB', error);
     process.exit(1);

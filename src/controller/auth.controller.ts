@@ -11,7 +11,9 @@ import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyR
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../utils/sendEmail';
 const ejs = require('ejs');
-import { TOKEN_EXP } from '../config/app.config';
+import { convertObjectId, MEMBER_INVITE_STATUS, TOKEN_EXP } from '../config/app.config';
+import { BoardInviteModel } from '../model/boardInvite.model';
+import { MemberModel } from '../model/members.model';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -42,7 +44,7 @@ const Signup: RequestHandler = async (request: Request, response: Response, next
     userCreated.email_token_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await userCreated.save();
 
-    const verifyUrl = `https://board-camp-fusion.lovable.app/?token=${token}`;
+    const verifyUrl = `${process.env.FE_URL}/?token=${token}`;
     const templatePath = __dirname + '/../helper/email-templates/verifyEmail.ejs';
     const html = await ejs.renderFile(templatePath, { link: verifyUrl });
 
@@ -150,6 +152,20 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
     user.email_token_expires_at = null;
     await user.save();
 
+    // Check if user invited to board and not signup
+    const boardInvite = await BoardInviteModel.findOne({ email: user.email, status: MEMBER_INVITE_STATUS.PENDING });
+    if (boardInvite) {
+      await BoardInviteModel.updateOne(
+        { email: user.email, status: MEMBER_INVITE_STATUS.PENDING },
+        { $set: { status: MEMBER_INVITE_STATUS.COMPLETED } }
+      );
+      MemberModel.create({
+        memberId: convertObjectId(user._id.toString()),
+        role: boardInvite.role,
+        boardId: convertObjectId(boardInvite?.boardId?.toString()),
+        workspaceId: convertObjectId(boardInvite?.workspaceId?.toString()),
+      });
+    }
     APIResponse(response, true, HttpStatusCode.OK, 'Email verified successfully..!');
   } catch (err: any) {
     if (err.name === 'TokenExpiredError') {
@@ -175,7 +191,7 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
       user.email_token_expires_at = new Date(Date.now() + 15 * 60 * 1000);
       await user.save();
 
-      const verifyUrl = `https://board-camp-fusion.lovable.app/?token=${newToken}`;
+      const verifyUrl = `${process.env.FE_URL}/?token=${newToken}`;
       const templatePath = __dirname + '/../helper/email-templates/verifyEmail.ejs';
       const html = await ejs.renderFile(templatePath, { link: verifyUrl });
 

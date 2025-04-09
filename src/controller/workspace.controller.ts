@@ -22,8 +22,8 @@ export const createWorkSpaceController = async (req: express.Request, res: expre
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else {
-      return next(err);
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
 };
@@ -42,10 +42,8 @@ export const updateWorkSpaceController = async (req: express.Request, res: expre
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully updated', workspace);
   } catch (err) {
-    if (err instanceof Joi.ValidationError) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else {
-      return next(err);
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
 };
@@ -63,10 +61,8 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully deleted', workspace);
   } catch (err) {
-    if (err instanceof Joi.ValidationError) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else {
-      return next(err);
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
 };
@@ -84,10 +80,8 @@ export const getWorkSpaceDetailController = async (req: express.Request, res: ex
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
   } catch (err) {
-    if (err instanceof Joi.ValidationError) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else {
-      return next(err);
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
 };

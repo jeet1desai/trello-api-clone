@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Board Invitation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 20px;
+    }
+    .email-container {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 30px;
+      max-width: 600px;
+      margin: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 20px;
+      background-color: #4f46e5;
+      color: #fff;
+      padding: 12px 24px;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #999999;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <h2>You're invited to join a board</h2>
+
+    <p>Hi <%= inviteeName || 'there' %>,</p>
+
+    <p><strong><%= inviterName %></strong> has invited you to collaborate on the board <strong>"<%= boardName %>"</strong> in the workspace <strong>"<%= workspaceName %>"</strong>.</p>
+
+    <p>Click the button below to get started:</p>
+
+    <a href="<%= link %>" class="btn">Click here</a>
+
+    <p>If you weren't expecting this invitation, you can ignore this email.</p>
+
+    <div class="footer">
+      &copy; <%= new Date().getFullYear() %> BaseTeamWork By Tatvasoft. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>
