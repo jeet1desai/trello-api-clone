@@ -4,7 +4,14 @@ import User from '../model/user.model';
 import bcryptJS from 'bcryptjs';
 import { HttpStatusCode } from '../helper/enum';
 import { validateRequest } from '../utils/validation.utils';
-import { loginSchema, refreshTokenSchema, signupSchema } from '../schemas/auth.schema';
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  refreshTokenSchema,
+  resetPasswordSchema,
+  signupSchema,
+} from '../schemas/auth.schema';
 import Joi from 'joi';
 import generateTokens from '../utils/generateTokens';
 import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyRefreshToken';
@@ -209,4 +216,117 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
   }
 };
 
-export default { Signup, Signin, RefreshToken, VerifyEmail };
+const ForgotPassword: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+  try {
+    const reqBody = await request.body;
+    await validateRequest(reqBody, forgotPasswordSchema);
+    const { email } = reqBody;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
+      return;
+    }
+
+    let otp = Math.random();
+    otp = Math.floor(100000 + Math.random() * 900000);
+    const templatePath = __dirname + '/../helper/email-templates/sendOTP.ejs';
+    const html = await ejs.renderFile(templatePath, { otp });
+
+    const mailOptions = {
+      to: email,
+      subject: 'OTP verification',
+      html,
+    };
+    user.otp = otp;
+    user.otp_expire = new Date(Date.now() + 3 * 60 * 1000);
+    user.save();
+    await sendEmail(mailOptions);
+    APIResponse(response, true, HttpStatusCode.OK, 'We have sent you otp to your email..!');
+  } catch (error: unknown) {
+    if (error instanceof Joi.ValidationError) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
+    } else {
+      return next(error);
+    }
+  }
+};
+
+const ChangePassword: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+  try {
+    const reqBody = await request.body;
+    await validateRequest(reqBody, changePasswordSchema);
+    const { email, otp, password } = reqBody;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
+      return;
+    }
+
+    if (!user.otp || !user.otp_expire || new Date() > user.otp_expire) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'OTP has expired. Please request a new one..!');
+      return;
+    }
+
+    if (user.otp !== otp) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'Invalid OTP..!');
+      return;
+    }
+
+    const salt = await bcryptJS.genSalt(10);
+    const hashedPassword = await bcryptJS.hash(password, salt);
+
+    user.password = hashedPassword;
+    user.otp = null;
+    user.otp_expire = null;
+    await user.save();
+
+    APIResponse(response, true, HttpStatusCode.OK, 'New password successfully updated..!');
+  } catch (error: unknown) {
+    if (error instanceof Joi.ValidationError) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
+    } else {
+      return next(error);
+    }
+  }
+};
+
+const ResetPassword: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+  try {
+    const reqBody = await request.body;
+    const { old_password, new_password } = reqBody;
+    await validateRequest(reqBody, resetPasswordSchema);
+    const user = (request as any)?.user;
+    if (!user) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
+      return;
+    }
+
+    const validateOldPassword = await bcryptJS.compare(old_password, user.password);
+    if (!validateOldPassword) {
+      APIResponse(response, false, 401, 'Incorrect old password. If you forgot your current password, please use the "Forgot Password" option..!');
+      return;
+    }
+
+    const salt = await bcryptJS.genSalt(10);
+    const hashedPassword = await bcryptJS.hash(new_password, salt);
+
+    const newuser = await User.findByIdAndUpdate({ _id: user._id }, { password: hashedPassword }, { runValidators: true, returnDocument: 'after' });
+
+    if (!newuser) {
+      APIResponse(response, false, HttpStatusCode.NOT_FOUND, 'User not found..!');
+      return;
+    }
+
+    APIResponse(response, true, HttpStatusCode.OK, 'New password successfully updated..!', newuser);
+  } catch (error: unknown) {
+    if (error instanceof Joi.ValidationError) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
+    } else {
+      return next(error);
+    }
+  }
+};
+
+export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword };
