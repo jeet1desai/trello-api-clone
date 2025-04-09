@@ -7,6 +7,9 @@ import { WorkSpaceModel } from '../../src/model/workspace.model';
 import mongoose from 'mongoose';
 import { BoardModel } from '../../src/model/board.model';
 import { MemberModel } from '../../src/model/members.model';
+import { BoardInviteModel } from '../../src/model/boardInvite.model';
+import ejs from 'ejs';
+import * as mailer from '../../src/utils/sendEmail';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -122,6 +125,143 @@ describe('Board API', () => {
           expect(res.body.message).to.equal('DB error');
           done();
         });
+    });
+
+    it('should create board with existing members and invite new users', async () => {
+      sinon.stub(WorkSpaceModel, 'findById').resolves(mockWorkspace as any);
+      sinon.stub(BoardModel, 'create').resolves([{ _id: new mongoose.Types.ObjectId(), name: 'Board A' }] as any);
+      sinon.stub(MemberModel, 'create').resolves({} as any);
+      sinon
+        .stub(User, 'findOne')
+        .onFirstCall()
+        .resolves(mockUser as any)
+        .onSecondCall()
+        .resolves(null);
+      sinon.stub(BoardInviteModel, 'create').resolves({} as any);
+      sinon.stub(ejs, 'renderFile').resolves('<html>email</html>');
+      sinon.stub(mailer, 'sendEmail').resolves({ success: true, info: {} } as any);
+
+      const response = await server
+        .post(`${API_URL}/board/create-board`)
+        .set('Cookie', ['access_token=token'])
+        .send({
+          name: 'Board A',
+          description: 'Testing',
+          workspace: mockWorkspace._id.toString(),
+          members: ['creator@example.com', 'newuser@example.com'],
+        });
+
+      expect(response.status).to.equal(201);
+      expect(response.body.success).to.be.true;
+      expect(response.body.message).to.equal('Board successfully created');
+    });
+  });
+
+  describe('PUT /update-board/:id', async () => {
+    it('should update a board and invite a new user by email', (done) => {
+      sinon.stub(WorkSpaceModel, 'findById').resolves(mockWorkspace as any);
+      sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(mockBoard as any);
+      sinon.stub(MemberModel, 'create').resolves({} as any);
+
+      sinon.stub(User, 'findOne').resolves(mockUser as any);
+
+      server
+        .put(`${API_URL}/board/update-board/67f632a547cdbb5b53b28718`)
+        .set('Cookie', ['access_token=token'])
+        .send({
+          name: 'Sprint 1',
+          description: 'Dashboard and bugs',
+        })
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Board successfully updated');
+          done();
+        });
+    });
+
+    it('should handle board not found', (done) => {
+      sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(null as any);
+
+      server
+        .put(`${API_URL}/board/update-board/67f632a547cdbb5b53b28718`)
+        .set('Cookie', ['access_token=token'])
+        .send({
+          name: 'Sprint 1',
+          description: 'Dashboard and bugs',
+        })
+        .expect(404)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Board not found');
+          done();
+        });
+    });
+
+    it('should return 502 on unexpected DB error', (done) => {
+      sinon.stub(BoardModel, 'findByIdAndUpdate').rejects(new Error('DB error'));
+
+      server
+        .put(`${API_URL}/board/update-board/67f632a547cdbb5b53b28718`)
+        .set('Cookie', ['access_token=token'])
+        .send({
+          name: 'Sprint 1',
+          description: 'Dashboard and bugs',
+        })
+        .expect(502)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('DB error');
+          done();
+        });
+    });
+
+    it('should update board and add members (existing + invited)', async () => {
+      // Stub DB ops
+      sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(mockBoard as any);
+      sinon.stub(WorkSpaceModel, 'findById').resolves(mockWorkspace as any);
+
+      const existingUser = {
+        _id: new mongoose.Types.ObjectId(),
+        email: 'existing@user.com',
+        first_name: 'John',
+        last_name: 'Smith',
+      };
+
+      sinon
+        .stub(User, 'findOne')
+        .withArgs({ email: 'existing@user.com' })
+        .resolves(existingUser as any)
+        .withArgs({ email: 'new@user.com' })
+        .resolves(null);
+
+      // Member not added yet
+      sinon.stub(MemberModel, 'findOne').resolves(null as any);
+      sinon.stub(MemberModel, 'create').resolves({} as any);
+
+      // Invite check & create
+      sinon.stub(BoardInviteModel, 'findOne').resolves(null as any);
+      sinon.stub(BoardInviteModel, 'create').resolves({} as any);
+
+      // Stub EJS template rendering
+      sinon.stub(ejs, 'renderFile').resolves('<html>Email content</html>');
+
+      // Stub mailer
+      sinon.stub(mailer, 'sendEmail').resolves(true as any);
+
+      const res = await server
+        .put(`${API_URL}/board/update-board/${mockBoard._id}`)
+        .set('Cookie', [`access_token=token`])
+        .send({
+          name: 'Updated Sprint',
+          description: 'Updated description',
+          members: ['existing@user.com', 'new@user.com'],
+        });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+      expect(res.body.message).to.equal('Board successfully updated');
+      expect(res.body.data.name).to.equal('Sprint 1'); // from stubbed board
     });
   });
 });
