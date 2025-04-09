@@ -2,9 +2,14 @@ import express from 'express';
 import { WorkSpaceModel } from '../model/workspace.model';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
+import Joi from 'joi';
+import { validateRequest } from '../utils/validation.utils';
+import { createWorkspaceSchema } from '../schemas/workspace.schema';
 
-export const createWorkSpaceController = async (req: express.Request, res: express.Response) => {
+export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
+    await validateRequest(req.body, createWorkspaceSchema);
+
     const { name, description } = req.body;
     // @ts-expect-error
     const user = req?.user;
@@ -15,15 +20,15 @@ export const createWorkSpaceController = async (req: express.Request, res: expre
     });
     APIResponse(res, true, HttpStatusCode.CREATED, 'Workspace successfully created', data);
   } catch (err) {
-    let errorMessage = 'Something went wrong';
-    if (err instanceof Error) {
-      errorMessage = err.message;
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else {
+      return next(err);
     }
-    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, errorMessage, null);
   }
 };
 
-export const updateWorkSpaceController = async (req: express.Request, res: express.Response) => {
+export const updateWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const { id } = req.params;
     const { name, description } = req.body;
@@ -37,15 +42,15 @@ export const updateWorkSpaceController = async (req: express.Request, res: expre
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully updated', workspace);
   } catch (err) {
-    let errorMessage = 'Something went wrong';
-    if (err instanceof Error) {
-      errorMessage = err.message;
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else {
+      return next(err);
     }
-    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, errorMessage, null);
   }
 };
 
-export const deleteWorkSpaceController = async (req: express.Request, res: express.Response) => {
+export const deleteWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const { id } = req.params;
 
@@ -58,15 +63,15 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully deleted', workspace);
   } catch (err) {
-    let errorMessage = 'Something went wrong';
-    if (err instanceof Error) {
-      errorMessage = err.message;
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else {
+      return next(err);
     }
-    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, errorMessage, null);
   }
 };
 
-export const getWorkSpaceDetailController = async (req: express.Request, res: express.Response) => {
+export const getWorkSpaceDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const { id } = req.params;
 
@@ -79,10 +84,10 @@ export const getWorkSpaceDetailController = async (req: express.Request, res: ex
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
   } catch (err) {
-    let errorMessage = 'Something went wrong';
-    if (err instanceof Error) {
-      errorMessage = err.message;
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else {
+      return next(err);
     }
-    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, errorMessage, null);
   }
 };
