@@ -11,7 +11,7 @@ export const createWorkSpaceController = async (req: express.Request, res: expre
     const data = await WorkSpaceModel.create({
       name,
       description,
-      createdBy: '67f3cb9504aa115c061c0634',
+      createdBy: user?._id,
     });
     APIResponse(res, true, HttpStatusCode.CREATED, 'Workspace successfully created', data);
   } catch (err) {

@@ -1,33 +1,30 @@
-import express, { Express, Request, Response } from 'express';
-import dotenv from 'dotenv';
-import morgan from 'morgan';
-import helmet from 'helmet';
-import cors from 'cors';
+import express, { Express, NextFunction, Request, Response } from 'express';
+import dotenv, { config } from 'dotenv';
 import routes from './route/index.route';
 import { notFound, errorHandler } from './middleware/logger';
 import { connectToDB } from './config/mongoose';
+import { createLogger } from './utils/Logger';
+import runStandardMiddleware from './middleware/standard.middleware';
+
+let log = createLogger('server');
 
 dotenv.config();
 
 const app: Express = express();
 const port = process.env.PORT || 3030;
 
-app.use(morgan('dev'));
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+runStandardMiddleware(app);
 
 app.get('/', (_req: Request, res: Response) => {
   res.json({ test: 'Express + TypeScript Server' });
 });
 
-app.use('/v1/api', routes);
+routes(app);
 app.use(notFound);
 app.use(errorHandler);
 
 app.listen(port, () => {
-  console.log(`[server]: Server is running at http://localhost:${port}`);
+  log.info(`Server is running on URL: http://localhost:${port}`);
   connectToDB();
 });
 

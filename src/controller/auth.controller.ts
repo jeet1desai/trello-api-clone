@@ -1,5 +1,5 @@
 import { Request, Response, RequestHandler, NextFunction } from 'express';
-import APIResponse from '../helper/apiResponse';
+import APIResponse, { sendWithCookie } from '../helper/apiResponse';
 import User from '../model/user.model';
 import bcryptJS from 'bcryptjs';
 import { HttpStatusCode } from '../helper/enum';
@@ -9,9 +9,10 @@ import Joi from 'joi';
 import generateTokens from '../utils/generateTokens';
 import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyRefreshToken';
 import jwt from 'jsonwebtoken';
-import { accessTokenExpireTime, emailVeirficationTokenExpireTime } from '../helper/constant';
+import { emailVeirficationTokenExpireTime } from '../helper/constant';
 import { sendEmail } from '../utils/sendEmail';
 const ejs = require('ejs');
+import { TOKEN_EXP } from '../config/app.config';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -95,11 +96,7 @@ const Signin: RequestHandler = async (request: Request, response: Response, next
 
     const { accessToken, refreshToken } = await generateTokens(tokenData);
 
-    APIResponse(response, true, 200, 'Login successfull..!', {
-      user,
-      accessToken,
-      refreshToken,
-    });
+    sendWithCookie({ res: response, message: 'Login successful..!', status: 200, data: { user, accessToken, refreshToken } });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
@@ -118,7 +115,7 @@ const RefreshToken: RequestHandler = async (request: Request, response: Response
       _id: verifyToken.tokenDetails._id,
       email: verifyToken.tokenDetails.email,
     };
-    const accessToken = jwt.sign(payload, process.env.ACCESS_TOKEN_PRIVATE_KEY as string, { expiresIn: accessTokenExpireTime });
+    const accessToken = jwt.sign(payload, process.env.TOKEN_PRIVATE_KEY as string, { expiresIn: TOKEN_EXP.access_token as any });
     APIResponse(response, true, 200, 'Access token created successfully', {
       accessToken,
     });
