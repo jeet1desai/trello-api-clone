@@ -17,10 +17,8 @@ import generateTokens from '../utils/generateTokens';
 import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyRefreshToken';
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../utils/sendEmail';
-const ejs = require('ejs');
-import { convertObjectId, MEMBER_INVITE_STATUS, TOKEN_EXP } from '../config/app.config';
-import { BoardInviteModel } from '../model/boardInvite.model';
-import { MemberModel } from '../model/members.model';
+import ejs from 'ejs';
+import { TOKEN_EXP } from '../config/app.config';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -158,20 +156,6 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
     user.email_token_expires_at = null;
     await user.save();
 
-    // Check if user invited to board and not signup
-    const boardInvite = await BoardInviteModel.findOne({ email: user.email, status: MEMBER_INVITE_STATUS.PENDING });
-    if (boardInvite) {
-      await BoardInviteModel.updateOne(
-        { email: user.email, status: MEMBER_INVITE_STATUS.PENDING },
-        { $set: { status: MEMBER_INVITE_STATUS.COMPLETED } }
-      );
-      MemberModel.create({
-        memberId: convertObjectId(user._id.toString()),
-        role: boardInvite.role,
-        boardId: convertObjectId(boardInvite?.boardId?.toString()),
-        workspaceId: convertObjectId(boardInvite?.workspaceId?.toString()),
-      });
-    }
     APIResponse(response, true, HttpStatusCode.OK, 'Email verified successfully..!');
     return;
   } catch (err: any) {

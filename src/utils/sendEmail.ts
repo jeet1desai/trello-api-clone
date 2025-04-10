@@ -11,7 +11,6 @@ interface SendEmailOptions {
 
 export const sendEmail = async ({ to, subject, html }: SendEmailOptions) => {
   try {
-    console.log('process', process.env.EHOST);
     const transporter = nodemailer.createTransport({
       host: process.env.EHOST,
       port: Number(process.env.EPORT),
