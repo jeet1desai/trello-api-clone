@@ -138,7 +138,6 @@ const RefreshToken: RequestHandler = async (request: Request, response: Response
 
 export const VerifyEmail: RequestHandler = async (request: Request, response: Response): Promise<void> => {
   const { token } = request.body;
-
   try {
     const decoded: any = jwt.verify(token, process.env.EMAIL_VERIFY_TOKEN as string);
     const user = await User.findById(decoded.userId);
@@ -174,6 +173,7 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
       });
     }
     APIResponse(response, true, HttpStatusCode.OK, 'Email verified successfully..!');
+    return;
   } catch (err: any) {
     if (err.name === 'TokenExpiredError') {
       const decoded: any = jwt.decode(token);

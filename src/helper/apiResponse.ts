@@ -21,7 +21,7 @@ const sendWithCookie = ({ res, message = 'Ok', status = 200, data }: any) => {
   res.cookie('access_token', data?.accessToken, COOKIE_OPTIONS);
   return res.cookie('refresh_token', data.refreshToken, COOKIE_OPTIONS).status(status).json({
     status,
-    msg: message,
+    message: message,
     data,
   });
 };
