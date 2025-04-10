@@ -23,7 +23,6 @@ export const createBoardController = async (req: express.Request, res: express.R
 
     // @ts-expect-error
     const user = req.user;
-
     const { workspace, name, description, members } = req.body;
 
     const workspaceDetails = await WorkSpaceModel.findById({ _id: workspace });
@@ -61,51 +60,25 @@ export const createBoardController = async (req: express.Request, res: express.R
 
     if (members && members.length > 0) {
       for (const email of members) {
+        if (email === user.email) continue;
+
         const existingUser = await User.findOne({ email });
-        if (existingUser) {
-          await MemberModel.create(
-            [
-              {
-                memberId: convertObjectId(existingUser._id.toString()),
-                role: MEMBER_ROLES.MEMBER,
-                boardId: convertObjectId(board?._id.toString()),
-                workspaceId: convertObjectId(workspace.toString()),
-              },
-            ],
-            { session }
-          );
-        } else {
-          await BoardInviteModel.create(
-            [
-              {
-                email,
-                role: MEMBER_ROLES.MEMBER,
-                boardId: board._id,
-                invitedBy: user._id,
-                workspaceId: convertObjectId(workspace.toString()),
-                status: MEMBER_INVITE_STATUS.PENDING,
-              },
-            ],
-            { session }
-          );
-        }
 
-        const templatePath = __dirname + '/../helper/email-templates/board-invite.ejs';
-        const html = await ejs.renderFile(templatePath, {
-          inviteeName: existingUser ? `${existingUser.first_name} ${existingUser.last_name}` : '',
-          inviterName: `${user.first_name} ${user.last_name}`,
-          boardName: board.name,
-          workspaceName: workspaceDetails.name,
-          link: `${process.env.FE_URL}`,
-        });
+        const [invite] = await BoardInviteModel.create(
+          [
+            {
+              email,
+              role: MEMBER_ROLES.MEMBER,
+              boardId: board._id,
+              invitedBy: user._id,
+              workspaceId: convertObjectId(workspace.toString()),
+              status: MEMBER_INVITE_STATUS.PENDING,
+            },
+          ],
+          { session }
+        );
 
-        const mailOptions = {
-          to: email,
-          subject: 'You are invited to join a board',
-          html,
-        };
-
-        await sendEmail(mailOptions);
+        await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: invite._id.toString() });
       }
     }
 
@@ -129,7 +102,6 @@ export const updateBoardController = async (req: express.Request, res: express.R
   try {
     // @ts-expect-error
     const user = req.user;
-
     const { id } = req.params;
     const { name, description, members } = req.body;
 
@@ -140,67 +112,65 @@ export const updateBoardController = async (req: express.Request, res: express.R
       return;
     }
 
+    const workspace = await WorkSpaceModel.findById(board.workspaceId);
+    if (!workspace) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
+      return;
+    }
+
     if (members && members.length > 0) {
       for (const email of members) {
+        if (email === user.email) continue;
+
         const existingUser = await User.findOne({ email });
-        const workspaceDetails = await WorkSpaceModel.findById({ _id: board.workspaceId });
 
-        if (!workspaceDetails) {
-          APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
-          return;
-        }
-
-        if (existingUser) {
-          const member = await MemberModel.findOne({
-            memberId: convertObjectId(existingUser._id.toString()),
-            boardId: convertObjectId(board._id.toString()),
-            workspaceId: convertObjectId(workspaceDetails._id.toString()),
-          });
-          if (!member) {
-            await MemberModel.create({
+        const isAlreadyMember = existingUser
+          ? await MemberModel.exists({
               memberId: convertObjectId(existingUser._id.toString()),
-              role: MEMBER_ROLES.MEMBER,
               boardId: convertObjectId(board._id.toString()),
-              workspaceId: convertObjectId(workspaceDetails._id.toString()),
-            });
-          }
-        } else {
-          const invitedMember = await BoardInviteModel.findOne({
-            email,
-            role: MEMBER_ROLES.MEMBER,
-            boardId: board._id,
-            invitedBy: user._id,
-            workspaceId: convertObjectId(workspaceDetails._id.toString()),
-            status: MEMBER_INVITE_STATUS.PENDING,
-          });
-          if (!invitedMember) {
-            await BoardInviteModel.create({
-              email,
-              role: MEMBER_ROLES.MEMBER,
-              boardId: board._id,
-              invitedBy: user._id,
-              workspaceId: convertObjectId(workspaceDetails._id.toString()),
-              status: MEMBER_INVITE_STATUS.PENDING,
-            });
-          }
-        }
+              workspaceId: convertObjectId(workspace._id.toString()),
+            })
+          : false;
 
-        const templatePath = __dirname + '/../helper/email-templates/board-invite.ejs';
-        const html = await ejs.renderFile(templatePath, {
-          inviteeName: existingUser ? `${existingUser.first_name} ${existingUser.last_name}` : '',
-          inviterName: `${user.first_name} ${user.last_name}`,
-          boardName: board.name,
-          workspaceName: workspaceDetails.name,
-          link: `${process.env.FE_URL}`,
+        if (isAlreadyMember) continue;
+
+        const existingInvite = await BoardInviteModel.findOne({
+          email,
+          boardId: board._id,
+          invitedBy: user._id,
+          workspaceId: workspace._id,
         });
 
-        const mailOptions = {
-          to: email,
-          subject: 'You are invited to join a board',
-          html,
-        };
+        // If status is COMPLETED → Skip
+        if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.COMPLETED) {
+          continue;
+        }
 
-        await sendEmail(mailOptions);
+        // If status is REJECTED → Update to PENDING and send email
+        if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.REJECTED) {
+          existingInvite.status = MEMBER_INVITE_STATUS.PENDING;
+          await existingInvite.save();
+          await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: existingInvite._id.toString() });
+          continue;
+        }
+
+        // If status is PENDING → Send email
+        if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.PENDING) {
+          await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: existingInvite._id.toString() });
+          continue;
+        }
+
+        // No invite exists → Create one and send email
+        const newInvite = await BoardInviteModel.create({
+          email,
+          role: MEMBER_ROLES.MEMBER,
+          boardId: convertObjectId(board._id.toString()),
+          invitedBy: convertObjectId(user._id.toString()),
+          workspaceId: convertObjectId(workspace._id.toString()),
+          status: MEMBER_INVITE_STATUS.PENDING,
+        });
+
+        await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: newInvite._id.toString() });
       }
     }
 
@@ -217,9 +187,11 @@ export const deleteBoardController = async (req: express.Request, res: express.R
   session.startTransaction();
 
   try {
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
-    const board = await BoardModel.findByIdAndDelete({ _id: id }, { session });
 
+    const board = await BoardModel.findByIdAndDelete({ _id: id }, { session });
     if (!board) {
       await session.abortTransaction();
       session.endSession();
@@ -228,8 +200,16 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       return;
     }
 
-    await MemberModel.deleteMany({ boardId: id }, { session });
+    const requestingMember = await MemberModel.findOne({ boardId: id, memberId: user._id });
+    if (!requestingMember || requestingMember.role !== MEMBER_ROLES.ADMIN) {
+      await session.abortTransaction();
+      session.endSession();
 
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to delete board');
+      return;
+    }
+
+    await MemberModel.deleteMany({ boardId: id }, { session });
     await BoardInviteModel.deleteMany({ boardId: id }, { session });
 
     await session.commitTransaction();
@@ -244,4 +224,39 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
+};
+
+export const sendBoardInviteEmail = async ({
+  user,
+  email,
+  existingUser,
+  board,
+  workspace,
+  inviteId,
+}: {
+  user: any;
+  email: string;
+  existingUser?: any;
+  board: any;
+  workspace: any;
+  inviteId: string;
+}) => {
+  const templatePath = __dirname + '/../helper/email-templates/board-invite.ejs';
+
+  const html = await ejs.renderFile(templatePath, {
+    inviteeName: existingUser ? `${existingUser.first_name} ${existingUser.last_name}` : '',
+    inviterName: `${user.first_name} ${user.last_name}`,
+    boardName: board.name,
+    workspaceName: workspace.name,
+    link: `${process.env.FE_URL}/invitation/${inviteId}`,
+    registerLink: `${process.env.FE_URL}/register`,
+  });
+
+  const mailOptions = {
+    to: email,
+    subject: 'You are invited to join a board',
+    html,
+  };
+
+  await sendEmail(mailOptions);
 };

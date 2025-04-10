@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { MEMBER_INVITE_STATUS } from '../config/app.config';
 
 export const createBoardSchema = Joi.object({
   name: Joi.string().required().trim().messages({
@@ -18,4 +19,23 @@ export const createBoardSchema = Joi.object({
     )
     .optional()
     .min(0),
+});
+
+export const updateInvitationSchema = Joi.object({
+  status: Joi.string().valid(MEMBER_INVITE_STATUS.COMPLETED, MEMBER_INVITE_STATUS.REJECTED).required().trim().messages({
+    'string.empty': 'Status is required',
+    'any.required': 'Status is required',
+    'any.only': 'Status must be one of COMPLETED or REJECTED',
+  }),
+});
+
+export const sendInvitationSchema = Joi.object({
+  members: Joi.array()
+    .items(
+      Joi.string().email().optional().messages({
+        'string.email': 'Each member must be a valid email',
+      })
+    )
+    .required()
+    .min(1),
 });
