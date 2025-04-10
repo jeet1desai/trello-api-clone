@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "dev": "nodemon --exec ts-node src/server.ts | npx bunyan",
     "lint:fix": "eslint --fix",
-    "test": "nyc --reporter=html --reporter=text --reporter=lcov mocha -r ts-node/register \"test/**/*.test.ts\" --exit"
+    "test": "nyc --reporter=html --reporter=text --reporter=lcov mocha -r ts-node/register \"test/**/*.test.ts\" --exit",
+    "test:single": "nyc --reporter=html --reporter=text --reporter=lcov mocha -r ts-node/register --exit"
   },
   "author": "",
   "license": "ISC",

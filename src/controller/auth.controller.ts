@@ -18,7 +18,7 @@ import verifyRefreshToken, { VerifyRefreshTokenResponse } from '../utils/verifyR
 import jwt from 'jsonwebtoken';
 import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
-import { TOKEN_EXP } from '../config/app.config';
+import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -103,6 +103,7 @@ const Signin: RequestHandler = async (request: Request, response: Response, next
     const { accessToken, refreshToken } = await generateTokens(tokenData);
 
     sendWithCookie({ res: response, message: 'Login successful..!', status: 200, data: { user, accessToken, refreshToken } });
+    return;
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
@@ -304,13 +305,27 @@ const ResetPassword: RequestHandler = async (request: Request, response: Respons
     }
 
     APIResponse(response, true, HttpStatusCode.OK, 'New password successfully updated..!', newuser);
+    return;
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
-    } else {
-      return next(error);
+      return;
     }
+    return next(error);
   }
 };
 
-export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword };
+const logoutHandler: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+  try {
+    // @ts-expect-error
+    request.session = null;
+    response.clearCookie('access_token', COOKIE_OPTIONS);
+    response.clearCookie('refresh_token', COOKIE_OPTIONS);
+    APIResponse(response, true, HttpStatusCode.OK, 'Logged out successfully..!');
+    return;
+  } catch (error: unknown) {
+    return next(error);
+  }
+};
+
+export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler };
