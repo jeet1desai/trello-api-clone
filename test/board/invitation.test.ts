@@ -8,7 +8,6 @@ import mongoose from 'mongoose';
 import { BoardModel } from '../../src/model/board.model';
 import { MemberModel } from '../../src/model/members.model';
 import { BoardInviteModel } from '../../src/model/boardInvite.model';
-import ejs from 'ejs';
 import * as mailer from '../../src/utils/sendEmail';
 import { MEMBER_INVITE_STATUS, MEMBER_ROLES } from '../../src/config/app.config';
 

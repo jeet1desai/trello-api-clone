@@ -10,7 +10,7 @@ import { MemberModel } from '../../src/model/members.model';
 import { BoardInviteModel } from '../../src/model/boardInvite.model';
 import ejs from 'ejs';
 import * as mailer from '../../src/utils/sendEmail';
-import { MEMBER_INVITE_STATUS } from '../../src/config/app.config';
+import { MEMBER_INVITE_STATUS, MEMBER_ROLES } from '../../src/config/app.config';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -383,6 +383,7 @@ describe('Board API', () => {
   describe('DELETE /delete-board/:id', async () => {
     it('should delete a board and its members and invites', async () => {
       sinon.stub(BoardModel, 'findByIdAndDelete').resolves(mockBoard as any);
+      sinon.stub(MemberModel, 'findOne').resolves({ role: MEMBER_ROLES.ADMIN } as any);
       sinon.stub(MemberModel, 'deleteMany').resolves({ deletedCount: 2 } as any);
       sinon.stub(BoardInviteModel, 'deleteMany').resolves({ deletedCount: 1 } as any);
 

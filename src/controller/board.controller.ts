@@ -187,9 +187,11 @@ export const deleteBoardController = async (req: express.Request, res: express.R
   session.startTransaction();
 
   try {
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
-    const board = await BoardModel.findByIdAndDelete({ _id: id }, { session });
 
+    const board = await BoardModel.findByIdAndDelete({ _id: id }, { session });
     if (!board) {
       await session.abortTransaction();
       session.endSession();
@@ -198,8 +200,16 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       return;
     }
 
-    await MemberModel.deleteMany({ boardId: id }, { session });
+    const requestingMember = await MemberModel.findOne({ boardId: id, memberId: user._id });
+    if (!requestingMember || requestingMember.role !== MEMBER_ROLES.ADMIN) {
+      await session.abortTransaction();
+      session.endSession();
 
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to delete board');
+      return;
+    }
+
+    await MemberModel.deleteMany({ boardId: id }, { session });
     await BoardInviteModel.deleteMany({ boardId: id }, { session });
 
     await session.commitTransaction();
