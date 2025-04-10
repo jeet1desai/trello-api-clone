@@ -28,3 +28,14 @@ export const updateInvitationSchema = Joi.object({
     'any.only': 'Status must be one of COMPLETED or REJECTED',
   }),
 });
+
+export const sendInvitationSchema = Joi.object({
+  members: Joi.array()
+    .items(
+      Joi.string().email().optional().messages({
+        'string.email': 'Each member must be a valid email',
+      })
+    )
+    .required()
+    .min(1),
+});
