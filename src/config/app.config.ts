@@ -21,6 +21,7 @@ export enum MEMBER_ROLES {
 export enum MEMBER_INVITE_STATUS {
   PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
+  REJECTED = 'REJECTED',
 }
 
 export const convertObjectId = (id: string): mongoose.Types.ObjectId => {

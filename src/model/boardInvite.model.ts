@@ -19,17 +19,14 @@ const schema = new mongoose.Schema<BoardInviteModelType>(
     },
     boardId: {
       type: mongoose.Schema.Types.ObjectId,
-      default: '',
       ref: 'boards',
     },
     invitedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      default: '',
       ref: 'users',
     },
     workspaceId: {
       type: mongoose.Schema.Types.ObjectId,
-      default: '',
       ref: 'workspaces',
     },
     status: {
