@@ -3,6 +3,7 @@ import workspaceRouter from './workspace.route';
 import boardRouter from './board.route';
 import authRouter from './auth.route';
 import invitationRouter from './invitation.route';
+import userRouter from './user.route';
 
 const BASE_PATH = '/v1/api';
 
@@ -12,6 +13,7 @@ export default (app: Application) => {
     app.use(`${BASE_PATH}/workspace`, workspaceRouter);
     app.use(`${BASE_PATH}/board`, boardRouter);
     app.use(`${BASE_PATH}/invite`, invitationRouter);
+    app.use(`${BASE_PATH}/user`, userRouter);
   };
   routes();
 };

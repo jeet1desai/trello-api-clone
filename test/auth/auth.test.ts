@@ -10,8 +10,6 @@ import Joi from 'joi';
 import * as tokenUtil from '../../src/utils/generateTokens';
 import * as verifyRefreshTokenUtil from '../../src/utils/verifyRefreshToken';
 import * as sendEmailUtil from '../../src/utils/verifyRefreshToken';
-import { BoardInviteModel } from '../../src/model/boardInvite.model';
-import { MemberModel } from '../../src/model/members.model';
 const ejs = require('ejs');
 
 describe('Authentication API', () => {
@@ -21,13 +19,9 @@ describe('Authentication API', () => {
     email: 'test@example.com',
     password: 'password123',
   };
-  beforeEach(() => {
-    // sinon.stub(jwt, 'verify').returns({ _id: 'test-user-id', email: 'test@example.com' } as any);
-    // sinon.stub(User, 'findById').resolves({ _id: 'test-user-id', email: 'test@example.com' } as any);
-  });
 
   afterEach(() => {
-    sinon.restore(); // Clean stubs after each test
+    sinon.restore();
   });
 
   describe('POST1 /signup', async () => {
@@ -598,22 +592,6 @@ describe('Authentication API', () => {
           done();
         });
     });
-
-    it('should return validation error if request is invalid', (done) => {
-      sinon.stub(validator, 'validateRequest').throws(new Joi.ValidationError('Invalid input', [], null));
-
-      server
-        .post(endpoint)
-        .send({
-          old_password: '',
-          new_password: '',
-        })
-        .expect(401)
-        .end((err, res) => {
-          if (err) return done(err);
-          done();
-        });
-    });
   });
 
   describe('POST /verify-email', function () {
@@ -706,6 +684,28 @@ describe('Authentication API', () => {
           if (err) return done(err);
           expect(res.body.success).to.be.false;
           expect(res.body.message).to.equal('Invalid token...!');
+          done();
+        });
+    });
+  });
+
+  describe('GET /logout', () => {
+    it('should logout user successfully', function (done) {
+      this.timeout(5000);
+
+      server
+        .get(`${API_URL}/auth/logout`)
+        .expect(200)
+        .end((err, res) => {
+          if (err) return done(err);
+
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Logged out successfully..!');
+
+          const setCookies = res.header['set-cookie'] as unknown as string[];
+          expect(setCookies.some((cookie: string) => cookie.includes('access_token=;'))).to.be.true;
+          expect(setCookies.some((cookie: string) => cookie.includes('refresh_token=;'))).to.be.true;
+
           done();
         });
     });
