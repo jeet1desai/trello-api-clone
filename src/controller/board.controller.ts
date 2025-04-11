@@ -4,7 +4,7 @@ import { validateRequest } from '../utils/validation.utils';
 import { createBoardSchema } from '../schemas/board.schema';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
-import mongoose from 'mongoose';
+import mongoose, { PipelineStage } from 'mongoose';
 import { BoardModel } from '../model/board.model';
 import { convertObjectId, MEMBER_INVITE_STATUS, MEMBER_ROLES } from '../config/app.config';
 import { WorkSpaceModel } from '../model/workspace.model';
@@ -224,6 +224,129 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
+};
+
+export const getBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const [board] = await BoardModel.aggregate(getBoardDetailsQuery(id));
+
+    if (!board) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
+      return;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Board successfully fetched', board);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+const getBoardDetailsQuery = (boardId: string): PipelineStage[] => {
+  return [
+    { $match: { $expr: { $eq: ['$_id', convertObjectId(boardId)] } } },
+    {
+      $lookup: {
+        from: 'users',
+        let: { memberId: '$createdBy' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$memberId'] } } },
+          { $project: { _id: 1, first_name: 1, middle_name: 1, last_name: 1, email: 1 } },
+        ],
+        as: 'boardOwner',
+      },
+    },
+    {
+      $unwind: {
+        path: '$boardOwner',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: 'members',
+        let: { boardId: convertObjectId(boardId) },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$boardId', '$$boardId'] } } },
+          {
+            $lookup: {
+              from: 'users',
+              let: { memberId: '$memberId' },
+              pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$memberId'] } } }, { $project: { __v: 0, updatedAt: 0, password: 0 } }],
+              as: 'user',
+            },
+          },
+          {
+            $unwind: {
+              path: '$user',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          { $project: { __v: 0, updatedAt: 0, createdAt: 0 } },
+        ],
+        as: 'members',
+      },
+    },
+    {
+      $lookup: {
+        from: 'workspaces',
+        let: { workspaceId: '$workspaceId' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$workspaceId'] } } },
+          {
+            $lookup: {
+              from: 'users',
+              let: { creatorId: '$createdBy' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$creatorId'] } } },
+                { $project: { _id: 1, first_name: 1, middle_name: 1, last_name: 1, email: 1 } },
+              ],
+              as: 'workspaceOwner',
+            },
+          },
+          { $unwind: { path: '$workspaceOwner', preserveNullAndEmptyArrays: true } },
+          { $project: { _id: 1, name: 1, workspaceOwner: 1 } },
+        ],
+        as: 'workspace',
+      },
+    },
+  ];
+};
+
+export const getWorkspaceBoardsController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const boards = await BoardModel.aggregate(getWorkspaceBoardsQuery(id));
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', boards);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+const getWorkspaceBoardsQuery = (workspaceId: string): PipelineStage[] => {
+  return [
+    { $match: { $expr: { $eq: ['$workspaceId', convertObjectId(workspaceId)] } } },
+    {
+      $lookup: {
+        from: 'users',
+        let: { memberId: '$createdBy' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$memberId'] } } },
+          { $project: { _id: 1, first_name: 1, middle_name: 1, last_name: 1, email: 1 } },
+        ],
+        as: 'boardOwner',
+      },
+    },
+    { $unwind: { path: '$boardOwner', preserveNullAndEmptyArrays: true } },
+    { $project: { _id: 1, name: 1, boardOwner: 1 } },
+  ];
 };
 
 export const sendBoardInviteEmail = async ({
