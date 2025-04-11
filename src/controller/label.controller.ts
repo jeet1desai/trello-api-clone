@@ -111,6 +111,25 @@ export const deleteLabelHandler = async (req: Request, res: Response, next: Next
   }
 };
 
+export const getLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const label = await LabelModel.findById(convertObjectId(id));
+
+    if (!label) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Label not found');
+      return;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Label successfully fetched', label);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
 export const getLabelsByBoardHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
