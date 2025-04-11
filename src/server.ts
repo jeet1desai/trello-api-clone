@@ -5,6 +5,7 @@ import { notFound, errorHandler } from './middleware/logger';
 import { connectToDB } from './config/mongoose';
 import { createLogger } from './utils/Logger';
 import runStandardMiddleware from './middleware/standard.middleware';
+import { initializeSocket } from './config/socketio.config';
 
 let log = createLogger('server');
 
@@ -23,7 +24,14 @@ routes(app);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(port, () => {
+const { server } = initializeSocket(app);
+
+// app.listen(port, () => {
+//   log.info(`Server is running on URL: http://localhost:${port}`);
+//   connectToDB();
+// });
+
+server.listen(port, () => {
   log.info(`Server is running on URL: http://localhost:${port}`);
   connectToDB();
 });
