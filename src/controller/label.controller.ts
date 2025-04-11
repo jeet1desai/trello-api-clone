@@ -58,3 +58,55 @@ export const createLabelHandler = async (req: Request, res: Response, next: Next
     }
   }
 };
+
+export const updateLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { name, background_color, text_color } = req.body;
+
+    const label = await LabelModel.findById(id);
+    if (!label) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Label not found');
+      return;
+    }
+
+    label.name = name;
+    label.backgroundColor = background_color;
+    label.textColor = text_color;
+    await label.save();
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Label successfully updated', label);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const deleteLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    // @ts-expect-error
+    const user = req.user;
+
+    const label = await LabelModel.findById(id);
+    if (!label) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Label not found');
+      return;
+    }
+
+    if (label?.createdBy?.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You are not authorized to delete this label');
+      return;
+    }
+
+    await LabelModel.deleteOne({ _id: id });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Label successfully deleted', label);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
