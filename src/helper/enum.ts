@@ -12,3 +12,15 @@ export enum HttpStatusCode {
   BAD_GATEWAY = 502,
   SERVICE_UNAVAILABLE = 503,
 }
+
+export enum Priority {
+  LOW = 'Low',
+  MEDIUM = 'Medium',
+  HIGH = 'High',
+  CRITICAL = 'Critical',
+}
+
+export enum TaskStatus {
+  COMPLETED = 'Completed',
+  INCOMPLETE = 'Incomplete',
+}

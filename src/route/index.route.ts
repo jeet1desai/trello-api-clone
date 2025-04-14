@@ -6,6 +6,7 @@ import invitationRouter from './invitation.route';
 import userRouter from './user.route';
 import statusRouter from './status.route';
 import memberRouter from './member.route';
+import taskRouter from './task.route';
 
 const BASE_PATH = '/v1/api';
 
@@ -18,6 +19,7 @@ export default (app: Application) => {
     app.use(`${BASE_PATH}/user`, userRouter);
     app.use(`${BASE_PATH}/status`, statusRouter);
     app.use(`${BASE_PATH}/member`, memberRouter);
+    app.use(`${BASE_PATH}/task`, taskRouter);
   };
   routes();
 };
