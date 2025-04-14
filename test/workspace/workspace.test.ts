@@ -4,6 +4,8 @@ import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
 import { WorkSpaceModel } from '../../src/model/workspace.model';
 import User from '../../src/model/user.model';
+import { MemberModel } from '../../src/model/members.model';
+import { MEMBER_ROLES } from '../../src/config/app.config';
 
 describe('Workspace API', () => {
   beforeEach(() => {
@@ -231,6 +233,66 @@ describe('Workspace API', () => {
 
       server
         .get(`${API_URL}/workspace/get-workspace/workspace123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .expect(502)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('DB error');
+          done();
+        });
+    });
+  });
+
+  describe('GET /workspace/get-workspaces', () => {
+    it('should return workspace list successfully', (done) => {
+      sinon.stub(MemberModel, 'find').resolves([] as any);
+      sinon.stub(WorkSpaceModel, 'find').resolves([{ _id: 'workspace123', name: 'Test Workspace', createdBy: 'user123' }] as any);
+
+      server
+        .get(`${API_URL}/workspace/get-workspaces`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Workspace successfully fetched');
+          done();
+        });
+    });
+
+    it('should return workspaces where the user is a member', (done) => {
+      sinon.stub(MemberModel, 'find').resolves([{ workspaceId: 'ws2', memberId: 'test-user-id', role: MEMBER_ROLES.MEMBER }] as any);
+      sinon.stub(WorkSpaceModel, 'find').resolves([{ _id: 'workspace123', name: 'Test Workspace', createdBy: 'user123' }] as any);
+
+      server
+        .get(`${API_URL}/workspace/get-workspaces`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Workspace successfully fetched');
+          done();
+        });
+    });
+
+    it('should return empty list if user has no workspaces', (done) => {
+      sinon.stub(MemberModel, 'find').resolves([] as any);
+      sinon.stub(WorkSpaceModel, 'find').resolves([] as any);
+
+      server
+        .get(`${API_URL}/workspace/get-workspaces`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.data).to.length(0);
+          done();
+        });
+    });
+
+    it('should handle internal server error', (done) => {
+      sinon.stub(MemberModel, 'find').rejects(new Error('DB error'));
+
+      server
+        .get(`${API_URL}/workspace/get-workspaces`)
         .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(502)
         .end((err, res) => {
