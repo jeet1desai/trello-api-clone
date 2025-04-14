@@ -323,11 +323,47 @@ describe('Task Management API', function () {
         .expect(200)
         .end((err, res) => {
           expect(res.body.success).to.be.true;
-          expect(res.body.message).to.equal('Status successfully fetched');
+          expect(res.body.message).to.equal('Task successfully fetched');
           expect(res.body.data).to.be.an('array');
           done();
         });
     });
+
+    it('should fetch task details by task id', (done) => {
+      findStub = sinon.stub(TaskModel, 'findById').returns({
+        select: sinon.stub().returns({
+          populate: sinon
+            .stub()
+            .withArgs({
+              path: 'status_list_id',
+              select: '_id name description board_id',
+              populate: sinon.match.array,
+            })
+            .returns({
+              populate: sinon
+                .stub()
+                .withArgs({
+                  path: 'created_by',
+                  select: '_id first_name \u00A0 middle_name last_name email profile_image',
+                })
+                .resolves(taskMock),
+            }),
+        }),
+      } as any);
+
+      server
+        .get(`${API_URL}/task/get-task/mockedTaskId123`)
+        .set('Cookie', ['access_token=token'])
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Task details successfully fetched');
+          expect(res.body.data).to.be.an('object');
+          expect(res.body.data).to.have.property('_id').equal('mockedTaskId123');
+          done();
+        });
+    });
+
     it('should return 502 if TaskModel.find throws an error', function (done) {
       const statusId = '67f78e4e22f51102298dce53';
       const errorMessage = 'Database error';

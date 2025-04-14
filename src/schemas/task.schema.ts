@@ -25,3 +25,14 @@ export const addTaskMemberSchema = Joi.object({
     'any.required': 'Member id is required',
   }),
 });
+
+export const addTaskLabelSchema = Joi.object({
+  task_id: Joi.string().required().trim().messages({
+    'string.empty': 'Task id is required',
+    'any.required': 'Task id is required',
+  }),
+  label_id: Joi.string().required().trim().messages({
+    'string.empty': 'Label id is required',
+    'any.required': 'Label id is required',
+  }),
+});

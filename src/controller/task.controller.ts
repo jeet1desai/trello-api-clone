@@ -66,7 +66,36 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
         ],
       });
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Status successfully fetched', tasks);
+    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully fetched', tasks);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const getTaskByIdHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const tasks = await TaskModel.findById({ _id: id })
+      .select('_id title description attachment board_id status_list_id created_by position status')
+      .populate({
+        path: 'status_list_id',
+        select: '_id name description board_id',
+        populate: [
+          {
+            path: 'board_id',
+            model: 'boards',
+            select: '_id name description',
+          },
+        ],
+      })
+      .populate({
+        path: 'created_by',
+        select: '_id first_name  middle_name last_name email profile_image',
+      });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Task details successfully fetched', tasks);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -223,7 +252,7 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       io.to(taskExist.board_id as unknown as string).emit('task-member-joined', newTask);
     }
 
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', { newTask, taskExist });
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', newTask);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
