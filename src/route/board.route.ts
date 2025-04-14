@@ -4,6 +4,7 @@ import {
   createBoardController,
   deleteBoardController,
   getBoardController,
+  getBoardsController,
   getWorkspaceBoardsController,
   updateBoardController,
 } from '../controller/board.controller';
@@ -16,5 +17,6 @@ router.put('/update-board/:id', updateBoardController);
 router.delete('/delete-board/:id', deleteBoardController);
 router.get('/get-board/:id', getBoardController);
 router.get('/get-boards-list/:id', getWorkspaceBoardsController);
+router.get('/get-boards', getBoardsController);
 
 export default router;

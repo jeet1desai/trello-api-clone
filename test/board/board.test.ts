@@ -616,4 +616,35 @@ describe('Board API', () => {
       expect(res.body.success).to.be.false;
     });
   });
+
+  describe('GET /get-boards', async () => {
+    it('should return boards list', async () => {
+      const res = await server.get(`${API_URL}/board/get-boards`).set('Cookie', [`access_token=token`]);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+      expect(res.body.message).to.equal('Boards successfully fetched');
+      expect(res.body.data).to.be.an('array');
+    });
+
+    it('should return empty array when workspace has no boards', async () => {
+      sinon.stub(BoardModel, 'aggregate').resolves([]);
+
+      const res = await server.get(`${API_URL}/board/get-boards`).set('Cookie', [`access_token=token`]);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+      expect(res.body.data).to.be.an('array').that.is.empty;
+    });
+
+    it('should handle internal server error gracefully', async () => {
+      sinon.stub(BoardModel, 'aggregate').throws(new Error('Something went wrong'));
+
+      const res = await server.get(`${API_URL}/board/get-boards`).set('Cookie', [`access_token=token`]);
+
+      expect(res.status).to.equal(502);
+      expect(res.body.success).to.be.false;
+      expect(res.body.message).to.equal('Something went wrong');
+    });
+  });
 });
