@@ -96,7 +96,6 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
     // 1. Get workspaceIds from boards where user is a member
     const boards = await MemberModel.find({ memberId: user._id, role: MEMBER_ROLES.MEMBER });
     const boardWorkspaceIds = boards.map((board) => board?.workspaceId?.toString());
-    console.log(boardWorkspaceIds);
 
     // 2. Find workspaces where user is creator or has a board inside
     const workspaces = await WorkSpaceModel.find({
