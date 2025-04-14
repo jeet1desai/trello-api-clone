@@ -100,9 +100,19 @@ const Signin: RequestHandler = async (request: Request, response: Response, next
       email: user.email,
     };
 
+    const userData = {
+      _id: user._id,
+      first_name: user.first_name,
+      middle_name: user.middle_name,
+      last_name: user.last_name,
+      email: user.email,
+      profile_image: user.profile_image,
+      status: user.status,
+    };
+
     const { accessToken, refreshToken } = await generateTokens(tokenData);
 
-    sendWithCookie({ res: response, message: 'Login successful..!', status: 200, data: { user, accessToken, refreshToken } });
+    sendWithCookie({ res: response, message: 'Login successful..!', status: 200, data: { user: userData, accessToken, refreshToken } });
     return;
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
@@ -122,9 +132,15 @@ const RefreshToken: RequestHandler = async (request: Request, response: Response
       _id: verifyToken.tokenDetails._id,
       email: verifyToken.tokenDetails.email,
     };
+
     const accessToken = jwt.sign(payload, process.env.TOKEN_PRIVATE_KEY as string, { expiresIn: TOKEN_EXP.access_token as any });
-    APIResponse(response, true, 200, 'Access token created successfully', {
-      accessToken,
+    const user = await User.findById({ _id: verifyToken.tokenDetails._id }).select('_id first_name middle_name last_name email profile_image status');
+
+    sendWithCookie({
+      res: response,
+      message: 'Access token created successfully',
+      status: 200,
+      data: { user, accessToken, refreshToken: reqBody.refreshToken },
     });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
