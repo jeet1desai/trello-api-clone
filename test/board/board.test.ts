@@ -11,6 +11,8 @@ import { BoardInviteModel } from '../../src/model/boardInvite.model';
 import ejs from 'ejs';
 import * as mailer from '../../src/utils/sendEmail';
 import { MEMBER_INVITE_STATUS, MEMBER_ROLES } from '../../src/config/app.config';
+import * as socketModule from '../../src/config/socketio.config';
+import { NotificationModel } from '../../src/model/notification.model';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -164,6 +166,63 @@ describe('Board API', () => {
       expect(response.status).to.equal(201);
       expect(response.body.success).to.be.true;
       expect(response.body.message).to.equal('Board successfully created');
+    });
+
+    it('should create board with existing members and invite new users and emit socket notification', async () => {
+      const boardId = new mongoose.Types.ObjectId();
+      const board = {
+        _id: boardId,
+        name: 'Test Board',
+        description: 'Board for testing',
+        workspaceId: mockWorkspace._id,
+      };
+
+      const invitedUser = {
+        _id: new mongoose.Types.ObjectId(),
+        email: 'invited@example.com',
+      };
+
+      const notification = {
+        _id: new mongoose.Types.ObjectId(),
+        message: `You have been invited to board "${board.name}"`,
+        receiver: invitedUser._id,
+        sender: mockUser._id,
+      };
+
+      sinon.stub(WorkSpaceModel, 'findById').resolves(mockWorkspace as any);
+      sinon.stub(BoardModel, 'create').resolves([board] as any);
+      sinon.stub(MemberModel, 'create').resolves({} as any);
+      sinon.stub(BoardInviteModel, 'create').resolves([{ _id: new mongoose.Types.ObjectId() }] as any);
+      sinon.stub(User, 'findOne').resolves(invitedUser as any);
+      sinon.stub(NotificationModel, 'create').resolves(notification as any);
+      sinon.stub(mailer, 'sendEmail').resolves();
+
+      const emitStub = sinon.stub();
+      const toStub = sinon.stub().returns({ emit: emitStub });
+
+      sinon.stub(socketModule, 'getSocket').returns({ io: { to: toStub } } as any);
+
+      const usersMap = new Map();
+      usersMap.set(invitedUser._id.toString(), 'socket123');
+      sinon.stub(socketModule, 'users').value(usersMap);
+
+      const response = await server
+        .post(`${API_URL}/board/create-board`)
+        .set('Cookie', ['access_token=token'])
+        .send({
+          name: 'Board A',
+          description: 'Testing',
+          workspace: mockWorkspace._id.toString(),
+          members: ['creator@example.com', 'newuser@example.com'],
+        });
+
+      expect(response.status).to.equal(201);
+      expect(response.body.success).to.be.true;
+      expect(emitStub.calledOnce).to.be.true;
+
+      const [eventName, payload] = emitStub.firstCall.args;
+      expect(eventName).to.equal('receive_notification');
+      expect(payload.data.message).to.include('invited to board');
     });
   });
 
@@ -328,14 +387,33 @@ describe('Board API', () => {
         save: sinon.stub().resolves(),
       };
 
+      const invitedUser = {
+        _id: new mongoose.Types.ObjectId(),
+        email: 'invited@example.com',
+      };
+
+      const notification = {
+        _id: new mongoose.Types.ObjectId(),
+        message: `You have been invited to board "${mockBoard.name}"`,
+        receiver: invitedUser._id,
+        sender: mockUser._id,
+      };
+
       sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(mockBoard as any);
       sinon.stub(WorkSpaceModel, 'findById').resolves(mockWorkspace as any);
-      sinon.stub(User, 'findOne').resolves(null);
+      sinon.stub(User, 'findOne').resolves(invitedUser as any);
       sinon.stub(MemberModel, 'exists').resolves(false as any);
       sinon.stub(BoardInviteModel, 'findOne').resolves(rejectedInvite as any);
-
+      sinon.stub(NotificationModel, 'create').resolves(notification as any);
       sinon.stub(ejs, 'renderFile').resolves('<html>Email content</html>');
       const emailStub = sinon.stub(mailer, 'sendEmail').resolves(true as any);
+
+      const emitStub = sinon.stub();
+      const toStub = sinon.stub().returns({ emit: emitStub });
+      sinon.stub(socketModule, 'getSocket').returns({ io: { to: toStub } } as any);
+      const usersMap = new Map();
+      usersMap.set(invitedUser._id.toString(), 'socket123');
+      sinon.stub(socketModule, 'users').value(usersMap);
 
       const res = await server
         .put(`${API_URL}/board/update-board/${mockBoard._id}`)
@@ -357,14 +435,33 @@ describe('Board API', () => {
         _id: new mongoose.Types.ObjectId(),
       };
 
+      const invitedUser = {
+        _id: new mongoose.Types.ObjectId(),
+        email: 'invited@example.com',
+      };
+
+      const notification = {
+        _id: new mongoose.Types.ObjectId(),
+        message: `You have been invited to board "${mockBoard.name}"`,
+        receiver: invitedUser._id,
+        sender: mockUser._id,
+      };
+
       sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(mockBoard as any);
       sinon.stub(WorkSpaceModel, 'findById').resolves(mockWorkspace as any);
-      sinon.stub(User, 'findOne').resolves(null);
+      sinon.stub(User, 'findOne').resolves(invitedUser as any);
       sinon.stub(MemberModel, 'exists').resolves(false as any);
       sinon.stub(BoardInviteModel, 'findOne').resolves(pendingInvite as any);
-
+      sinon.stub(NotificationModel, 'create').resolves(notification as any);
       sinon.stub(ejs, 'renderFile').resolves('<html>Email content</html>');
       const emailStub = sinon.stub(mailer, 'sendEmail').resolves(true as any);
+
+      const emitStub = sinon.stub();
+      const toStub = sinon.stub().returns({ emit: emitStub });
+      sinon.stub(socketModule, 'getSocket').returns({ io: { to: toStub } } as any);
+      const usersMap = new Map();
+      usersMap.set(invitedUser._id.toString(), 'socket123');
+      sinon.stub(socketModule, 'users').value(usersMap);
 
       const res = await server
         .put(`${API_URL}/board/update-board/${mockBoard._id}`)
@@ -382,10 +479,34 @@ describe('Board API', () => {
 
   describe('DELETE /delete-board/:id', async () => {
     it('should delete a board and its members and invites', async () => {
-      sinon.stub(BoardModel, 'findByIdAndDelete').resolves(mockBoard as any);
+      const populatedMember = { memberId: mockUser._id, _id: mockUser._id };
+
+      const receiver = { _id: new mongoose.Types.ObjectId(), email: 'invited@example.com' };
+
+      const notification = {
+        _id: new mongoose.Types.ObjectId(),
+        message: `Board "${mockBoard.name}" is deleted by admin and you have been removed from board`,
+        receiver: populatedMember.memberId,
+        sender: mockUser._id,
+      };
+
+      sinon.stub(BoardModel, 'findById').resolves(mockBoard as any);
       sinon.stub(MemberModel, 'findOne').resolves({ role: MEMBER_ROLES.ADMIN } as any);
-      sinon.stub(MemberModel, 'deleteMany').resolves({ deletedCount: 2 } as any);
-      sinon.stub(BoardInviteModel, 'deleteMany').resolves({ deletedCount: 1 } as any);
+      sinon.stub(MemberModel, 'find').returns({
+        populate: sinon.stub().resolves([populatedMember] as any),
+      } as any);
+      sinon.stub(BoardModel, 'deleteOne').resolves({} as any);
+      sinon.stub(MemberModel, 'deleteMany').resolves({} as any);
+      sinon.stub(BoardInviteModel, 'deleteMany').resolves({} as any);
+
+      sinon.stub(NotificationModel, 'create').resolves([notification] as any);
+
+      const emitStub = sinon.stub();
+      const toStub = sinon.stub().returns({ emit: emitStub });
+      sinon.stub(socketModule, 'getSocket').returns({ io: { to: toStub } } as any);
+      const usersMap = new Map();
+      usersMap.set(receiver._id.toString(), 'socket123');
+      sinon.stub(socketModule, 'users').value(usersMap);
 
       const res = await server.delete(`${API_URL}/board/delete-board/${mockBoard._id}`).set('Cookie', [`access_token=token`]);
 
@@ -405,13 +526,24 @@ describe('Board API', () => {
     });
 
     it('should handle internal server errors gracefully', async () => {
-      sinon.stub(BoardModel, 'findByIdAndDelete').throws(new Error('Something went wrong'));
+      sinon.stub(BoardModel, 'findById').throws(new Error('Something went wrong'));
 
       const res = await server.delete(`${API_URL}/board/delete-board/${mockBoard._id}`).set('Cookie', ['access_token=token']);
 
       expect(res.status).to.equal(502);
       expect(res.body.success).to.be.false;
       expect(res.body.message).to.equal('Something went wrong');
+    });
+
+    it('should return validation error if user is not admin', async () => {
+      sinon.stub(BoardModel, 'findById').resolves(mockBoard as any);
+      sinon.stub(MemberModel, 'findOne').resolves({ role: MEMBER_ROLES.MEMBER } as any);
+
+      const res = await server.delete(`${API_URL}/board/delete-board/${mockBoard._id}`).set('Cookie', ['access_token=token']);
+
+      expect(res.status).to.equal(403);
+      expect(res.body.success).to.be.false;
+      expect(res.body.message).to.equal('You do not have permission to delete board');
     });
   });
 

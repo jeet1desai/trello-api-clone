@@ -6,6 +6,8 @@ let server = null;
 let io: Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any> | null = null;
 let socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any> | null = null;
 
+export const users = new Map();
+
 export const initializeSocket = (app: Express.Application) => {
   server = http.createServer(app);
   io = new Server(server, { cors: { origin: '*' } });
@@ -14,17 +16,20 @@ export const initializeSocket = (app: Express.Application) => {
     console.log('Socket Connected', _socket.id);
     socket = _socket;
 
-    _socket.on('join', (room: string) => {
-      console.log(`${_socket.id} joined ${room}`);
-      _socket.join(room);
-    });
-
-    _socket.on('leave', (room: string) => {
-      console.log(`${_socket.id} leave room ${room}`);
-      _socket.leave(room);
+    // When a user logs in, they register with their userId
+    socket.on('register', (userId) => {
+      users.set(userId, socket?.id);
+      console.log(`User ${userId} registered with socket ${socket?.id}`);
     });
 
     _socket.on('disconnect', () => {
+      for (const [userId, id] of users.entries()) {
+        if (id === socket?.id) {
+          users.delete(userId);
+          break;
+        }
+      }
+
       console.error('Socket Disconnected!!!', _socket.id);
     });
   });

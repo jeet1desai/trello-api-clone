@@ -13,10 +13,14 @@ import User from '../model/user.model';
 import { BoardInviteModel } from '../model/boardInvite.model';
 import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
+import { getSocket, users } from '../config/socketio.config';
+import { NotificationModel } from '../model/notification.model';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+
+  const { io } = getSocket();
 
   try {
     await validateRequest(req.body, createBoardSchema);
@@ -78,6 +82,22 @@ export const createBoardController = async (req: express.Request, res: express.R
           { session }
         );
 
+        if (existingUser) {
+          const notification = await NotificationModel.create({
+            message: `You have been invited to board "${name}"`,
+            action: 'invited',
+            receiver: convertObjectId(existingUser._id.toString()),
+            sender: convertObjectId(user._id.toString()),
+          });
+
+          const socketId = users.get(existingUser._id.toString());
+          if (socketId) {
+            io?.to(socketId).emit('receive_notification', { data: notification });
+          } else {
+            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
+          }
+        }
+
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: invite._id.toString() });
       }
     }
@@ -99,6 +119,8 @@ export const createBoardController = async (req: express.Request, res: express.R
 };
 
 export const updateBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const { io } = getSocket();
+
   try {
     // @ts-expect-error
     const user = req.user;
@@ -150,12 +172,41 @@ export const updateBoardController = async (req: express.Request, res: express.R
         if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.REJECTED) {
           existingInvite.status = MEMBER_INVITE_STATUS.PENDING;
           await existingInvite.save();
+
+          const notification = await NotificationModel.create({
+            message: `You have been invited to board "${name}" again`,
+            action: 'invited',
+            receiver: convertObjectId(existingUser._id.toString()),
+            sender: convertObjectId(user._id.toString()),
+          });
+
+          const socketId = users.get(existingUser._id.toString());
+          if (socketId) {
+            io?.to(socketId).emit('receive_notification', { data: notification });
+          } else {
+            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
+          }
+
           await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: existingInvite._id.toString() });
           continue;
         }
 
         // If status is PENDING → Send email
         if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.PENDING) {
+          const notification = await NotificationModel.create({
+            message: `You have been invited to board "${name}"`,
+            action: 'invited',
+            receiver: convertObjectId(existingUser._id.toString()),
+            sender: convertObjectId(user._id.toString()),
+          });
+
+          const socketId = users.get(existingUser._id.toString());
+          if (socketId) {
+            io?.to(socketId).emit('receive_notification', { data: notification });
+          } else {
+            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
+          }
+
           await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: existingInvite._id.toString() });
           continue;
         }
@@ -169,6 +220,22 @@ export const updateBoardController = async (req: express.Request, res: express.R
           workspaceId: convertObjectId(workspace._id.toString()),
           status: MEMBER_INVITE_STATUS.PENDING,
         });
+
+        if (existingUser) {
+          const notification = await NotificationModel.create({
+            message: `You have been invited to board "${name}"`,
+            action: 'invited',
+            receiver: convertObjectId(existingUser._id.toString()),
+            sender: convertObjectId(user._id.toString()),
+          });
+
+          const socketId = users.get(existingUser._id.toString());
+          if (socketId) {
+            io?.to(socketId).emit('receive_notification', { data: notification });
+          } else {
+            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
+          }
+        }
 
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: newInvite._id.toString() });
       }
@@ -186,12 +253,14 @@ export const deleteBoardController = async (req: express.Request, res: express.R
   const session = await mongoose.startSession();
   session.startTransaction();
 
+  const { io } = getSocket();
+
   try {
     // @ts-expect-error
     const user = req.user;
     const { id } = req.params;
 
-    const board = await BoardModel.findByIdAndDelete({ _id: id }, { session });
+    const board = await BoardModel.findById({ _id: id });
     if (!board) {
       await session.abortTransaction();
       session.endSession();
@@ -209,14 +278,42 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       return;
     }
 
+    const membersToNotify = await MemberModel.find({ boardId: id, memberId: { $ne: user._id } }).populate('memberId');
+
+    await BoardModel.deleteOne({ _id: id }, { session });
     await MemberModel.deleteMany({ boardId: id }, { session });
     await BoardInviteModel.deleteMany({ boardId: id }, { session });
+
+    for (const member of membersToNotify) {
+      const userToNotify = member.memberId;
+
+      const [notification] = await NotificationModel.create(
+        [
+          {
+            message: `Board "${board.name}" is deleted by admin and you have been removed from board`,
+            action: 'removed',
+            receiver: userToNotify,
+            sender: user._id,
+          },
+        ],
+        { session }
+      );
+
+      const socketId = users.get(userToNotify);
+      if (socketId) {
+        io?.to(socketId).emit('receive_notification', { data: notification });
+      } else {
+        console.warn(`No socket connection found for user: ${userToNotify}`);
+      }
+    }
 
     await session.commitTransaction();
     session.endSession();
 
     APIResponse(res, true, HttpStatusCode.OK, 'Board successfully deleted', board);
   } catch (err) {
+    console.error('Delete Board Error:', err);
+
     await session.abortTransaction();
     session.endSession();
 
@@ -320,7 +417,9 @@ export const getWorkspaceBoardsController = async (req: express.Request, res: ex
   try {
     const { id } = req.params;
 
-    const boards = await BoardModel.aggregate(getWorkspaceBoardsQuery(id));
+    // @ts-expect-error
+    const user = req.user;
+    const boards = await BoardModel.aggregate(getWorkspaceBoardsQuery(id, user._id.toString()));
 
     APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', boards);
   } catch (err) {
@@ -330,9 +429,49 @@ export const getWorkspaceBoardsController = async (req: express.Request, res: ex
   }
 };
 
-const getWorkspaceBoardsQuery = (workspaceId: string): PipelineStage[] => {
+const getWorkspaceBoardsQuery = (workspaceId: string, userId: string): PipelineStage[] => {
   return [
     { $match: { $expr: { $eq: ['$workspaceId', convertObjectId(workspaceId)] } } },
+    {
+      $lookup: {
+        from: 'members',
+        let: { boardId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $eq: ['$boardId', '$$boardId'] }, { $eq: ['$memberId', convertObjectId(userId)] }, { $in: ['$role', ['MEMBER', 'ADMIN']] }],
+              },
+            },
+          },
+        ],
+        as: 'membership',
+      },
+    },
+    { $match: { $expr: { $gt: [{ $size: '$membership' }, 0] } } },
+    {
+      $lookup: {
+        from: 'members',
+        let: { boardId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$boardId', '$$boardId'] }] } } },
+          {
+            $lookup: {
+              from: 'users',
+              let: { memberId: '$memberId' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$memberId'] } } },
+                { $project: { _id: 1, first_name: 1, middle_name: 1, last_name: 1, email: 1 } },
+              ],
+              as: 'user',
+            },
+          },
+          { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+          { $project: { __v: 0, updatedAt: 0, createdAt: 0 } },
+        ],
+        as: 'members',
+      },
+    },
     {
       $lookup: {
         from: 'users',
@@ -345,7 +484,7 @@ const getWorkspaceBoardsQuery = (workspaceId: string): PipelineStage[] => {
       },
     },
     { $unwind: { path: '$boardOwner', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 1, name: 1, boardOwner: 1 } },
+    { $project: { _id: 1, name: 1, description: 1, boardOwner: 1, members: 1 } },
   ];
 };
 
