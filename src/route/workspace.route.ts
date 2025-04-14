@@ -2,6 +2,7 @@ import express from 'express';
 import {
   createWorkSpaceController,
   deleteWorkSpaceController,
+  getAllWorkSpaceController,
   getWorkSpaceDetailController,
   updateWorkSpaceController,
 } from '../controller/workspace.controller';
@@ -14,5 +15,6 @@ router.post('/create-workspace', createWorkSpaceController);
 router.put('/update-workspace/:id', updateWorkSpaceController);
 router.delete('/delete-workspace/:id', deleteWorkSpaceController);
 router.get('/get-workspace/:id', getWorkSpaceDetailController);
+router.get('/get-workspaces', getAllWorkSpaceController);
 
 export default router;

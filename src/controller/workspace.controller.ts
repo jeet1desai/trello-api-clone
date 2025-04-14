@@ -5,6 +5,8 @@ import { HttpStatusCode } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import { createWorkspaceSchema } from '../schemas/workspace.schema';
+import { MEMBER_ROLES } from '../config/app.config';
+import { MemberModel } from '../model/members.model';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -79,6 +81,29 @@ export const getWorkSpaceDetailController = async (req: express.Request, res: ex
     }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const getAllWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    // @ts-expect-error
+    const user = req?.user;
+
+    // 1. Get workspaceIds from boards where user is a member
+    const boards = await MemberModel.find({ memberId: user._id, role: MEMBER_ROLES.MEMBER });
+    const boardWorkspaceIds = boards.map((board) => board?.workspaceId?.toString());
+    console.log(boardWorkspaceIds);
+
+    // 2. Find workspaces where user is creator or has a board inside
+    const workspaces = await WorkSpaceModel.find({
+      $or: [{ createdBy: user._id }, { _id: { $in: boardWorkspaceIds } }],
+    });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspaces);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
