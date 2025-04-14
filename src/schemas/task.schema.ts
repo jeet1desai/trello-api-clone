@@ -14,3 +14,14 @@ export const createTaskSchema = Joi.object({
     'any.required': 'Status id is required',
   }),
 });
+
+export const addTaskMemberSchema = Joi.object({
+  task_id: Joi.string().required().trim().messages({
+    'string.empty': 'Task id is required',
+    'any.required': 'Task id is required',
+  }),
+  member_id: Joi.string().required().trim().messages({
+    'string.empty': 'Member id is required',
+    'any.required': 'Member id is required',
+  }),
+});

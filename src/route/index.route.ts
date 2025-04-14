@@ -7,6 +7,7 @@ import userRouter from './user.route';
 import statusRouter from './status.route';
 import memberRouter from './member.route';
 import taskRouter from './task.route';
+import taskMemberRouter from './task_member.route';
 import labelRouter from './label.route';
 
 const BASE_PATH = '/v1/api';
@@ -21,6 +22,7 @@ export default (app: Application) => {
     app.use(`${BASE_PATH}/status`, statusRouter);
     app.use(`${BASE_PATH}/member`, memberRouter);
     app.use(`${BASE_PATH}/task`, taskRouter);
+    app.use(`${BASE_PATH}/task-member`, taskMemberRouter);
     app.use(`${BASE_PATH}/label`, labelRouter);
   };
   routes();
