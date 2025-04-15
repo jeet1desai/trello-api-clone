@@ -100,7 +100,7 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
     // 2. Find workspaces where user is creator or has a board inside
     const workspaces = await WorkSpaceModel.find({
       $or: [{ createdBy: user._id }, { _id: { $in: boardWorkspaceIds } }],
-    });
+    }).populate('createdBy', 'first_name last_name email');
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspaces);
   } catch (err) {

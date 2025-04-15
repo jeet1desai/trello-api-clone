@@ -7,6 +7,8 @@ import { BoardModel } from '../model/board.model';
 import { MEMBER_ROLES } from '../config/app.config';
 import { BoardInviteModel } from '../model/boardInvite.model';
 import User from '../model/user.model';
+import { NotificationModel } from '../model/notification.model';
+import { getSocket, users } from '../config/socketio.config';
 
 export const getMemberListController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -28,6 +30,8 @@ export const getMemberListController = async (req: express.Request, res: express
 export const removeMemberController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+
+  const { io } = getSocket();
 
   try {
     // @ts-expect-error
@@ -82,6 +86,25 @@ export const removeMemberController = async (req: express.Request, res: express.
 
     await MemberModel.deleteOne({ boardId: bid, memberId: uid }, { session });
     await BoardInviteModel.deleteMany({ boardId: bid, email: deletedUser.email }, { session });
+
+    const [notification] = await NotificationModel.create(
+      [
+        {
+          message: `You have been removed from board "${board.name}"`,
+          action: 'removed',
+          receiver: uid,
+          sender: user._id,
+        },
+      ],
+      { session }
+    );
+
+    const socketId = users.get(uid);
+    if (socketId) {
+      io?.to(socketId).emit('receive_notification', { data: notification });
+    } else {
+      console.warn(`No socket connection found for user: ${uid}`);
+    }
 
     await session.commitTransaction();
     session.endSession();

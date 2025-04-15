@@ -11,6 +11,8 @@ import { MemberModel } from '../model/members.model';
 import { BoardModel } from '../model/board.model';
 import { WorkSpaceModel } from '../model/workspace.model';
 import { sendBoardInviteEmail } from './board.controller';
+import { NotificationModel } from '../model/notification.model';
+import { getSocket, users } from '../config/socketio.config';
 
 export const getInvitationDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -35,9 +37,13 @@ export const getInvitationDetailController = async (req: express.Request, res: e
 };
 
 export const updateInvitationDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const { io } = getSocket();
+
   try {
     await validateRequest(req.body, updateInvitationSchema);
 
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
     const { status } = req.body;
 
@@ -69,6 +75,20 @@ export const updateInvitationDetailController = async (req: express.Request, res
           role: invitation.role || MEMBER_ROLES.MEMBER,
         });
       }
+    }
+
+    const notification = await NotificationModel.create({
+      message: `${user.first_name} ${user.last_name} have ${status === MEMBER_INVITE_STATUS.COMPLETED ? 'accepted' : 'rejected'} the invitation to join the board`,
+      action: 'invitation',
+      receiver: invitation.invitedBy,
+      sender: user._id,
+    });
+
+    const socketId = users.get(invitation.invitedBy);
+    if (socketId) {
+      io?.to(socketId).emit('receive_notification', { data: notification });
+    } else {
+      console.warn(`No socket connection found for user: ${invitation.invitedBy}`);
     }
 
     invitation.status = status;

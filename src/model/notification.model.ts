@@ -24,12 +24,10 @@ const schema = new mongoose.Schema<NotificationModelType>(
     },
     receiver: {
       type: mongoose.Schema.Types.ObjectId,
-      default: '',
       ref: 'users',
     },
     sender: {
       type: mongoose.Schema.Types.ObjectId,
-      default: '',
       ref: 'users',
     },
   },
