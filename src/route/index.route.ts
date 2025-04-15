@@ -11,6 +11,7 @@ import taskMemberRouter from './task_member.route';
 import labelRouter from './label.route';
 import taskLabelRouter from './task_label.route';
 import notificationRouter from './notification.route';
+import commentRouter from './comment.route';
 
 const BASE_PATH = '/v1/api';
 
@@ -28,6 +29,7 @@ export default (app: Application) => {
     app.use(`${BASE_PATH}/label`, labelRouter);
     app.use(`${BASE_PATH}/tasklabel`, taskLabelRouter);
     app.use(`${BASE_PATH}/notification`, notificationRouter);
+    app.use(`${BASE_PATH}/comment`, commentRouter);
   };
   routes();
 };
