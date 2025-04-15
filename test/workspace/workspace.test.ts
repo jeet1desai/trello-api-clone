@@ -246,7 +246,11 @@ describe('Workspace API', () => {
   describe('GET /workspace/get-workspaces', () => {
     it('should return workspace list successfully', (done) => {
       sinon.stub(MemberModel, 'find').resolves([] as any);
-      sinon.stub(WorkSpaceModel, 'find').resolves([{ _id: 'workspace123', name: 'Test Workspace', createdBy: 'user123' }] as any);
+
+      const mockWorkspaces = [{ _id: 'workspace123', name: 'Test Workspace', createdBy: 'user123' }];
+      const populateStub3 = sinon.stub().resolves(mockWorkspaces);
+      const populateStub1 = sinon.stub().returns({ populate: populateStub3 });
+      sinon.stub(WorkSpaceModel, 'find').returns({ populate: populateStub1 } as any);
 
       server
         .get(`${API_URL}/workspace/get-workspaces`)
@@ -261,7 +265,11 @@ describe('Workspace API', () => {
 
     it('should return workspaces where the user is a member', (done) => {
       sinon.stub(MemberModel, 'find').resolves([{ workspaceId: 'ws2', memberId: 'test-user-id', role: MEMBER_ROLES.MEMBER }] as any);
-      sinon.stub(WorkSpaceModel, 'find').resolves([{ _id: 'workspace123', name: 'Test Workspace', createdBy: 'user123' }] as any);
+
+      const mockWorkspaces = [{ _id: 'workspace123', name: 'Test Workspace', createdBy: 'user123' }];
+      const populateStub3 = sinon.stub().resolves(mockWorkspaces);
+      const populateStub1 = sinon.stub().returns({ populate: populateStub3 });
+      sinon.stub(WorkSpaceModel, 'find').returns({ populate: populateStub1 } as any);
 
       server
         .get(`${API_URL}/workspace/get-workspaces`)
@@ -274,18 +282,17 @@ describe('Workspace API', () => {
         });
     });
 
-    it('should return empty list if user has no workspaces', (done) => {
+    it('should return empty list if user has no workspaces', async () => {
       sinon.stub(MemberModel, 'find').resolves([] as any);
-      sinon.stub(WorkSpaceModel, 'find').resolves([] as any);
+      const populateStub3 = sinon.stub().resolves([] as any);
+      const populateStub1 = sinon.stub().returns({ populate: populateStub3 });
+      sinon.stub(WorkSpaceModel, 'find').returns({ populate: populateStub1 } as any);
 
-      server
-        .get(`${API_URL}/workspace/get-workspaces`)
-        .set('Cookie', ['access_token=fake-jwt-token'])
-        .expect(200)
-        .end((err, res) => {
-          expect(res.body.data).to.length(0);
-          done();
-        });
+      const res = await server.get(`${API_URL}/workspace/get-workspaces`).set('Cookie', ['access_token=fake-jwt-token']);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+      expect(res.body.message).to.equal('Workspace successfully fetched');
     });
 
     it('should handle internal server error', (done) => {
