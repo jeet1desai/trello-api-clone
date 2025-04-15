@@ -6,7 +6,7 @@ import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
 import { addTaskLabelSchema } from '../schemas/task.schema';
-import { getSocket } from '../config/socketio.config';
+import { getSocket, users } from '../config/socketio.config';
 import { TaskLabelModel } from '../model/taskLabel.model';
 import { commentSchema } from '../schemas/comment.schema';
 import { CommentModel } from '../model/comment.model';
@@ -31,8 +31,11 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     });
 
     const { io } = getSocket();
-    if (io) {
-      io.to(taskExist.board_id as unknown as string).emit('comment-added', newComment);
+    const socketId = users.get(user._id.toString());
+    if (socketId) {
+      io?.to(socketId).emit('receive_comment', { data: newComment });
+    } else {
+      console.warn(`No socket connection found for user: ${user._id.toString()}`);
     }
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Comment successfully added', newComment);
@@ -94,12 +97,22 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
   try {
     const { id } = req.params;
     const { comment } = req.body;
+    // @ts-expect-error
+    const user = req?.user;
 
     const updatedComment = await CommentModel.findByIdAndUpdate({ _id: id }, { comment }, { runValidators: true, returnDocument: 'after' });
 
     if (!updatedComment) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Comment not found', req.body);
       return;
+    }
+
+    const { io } = getSocket();
+    const socketId = users.get(user._id.toString());
+    if (socketId) {
+      io?.to(socketId).emit('receive_updated_comment', { data: updatedComment });
+    } else {
+      console.warn(`No socket connection found for user: ${user._id.toString()}`);
     }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Comment successfully updated', updatedComment);

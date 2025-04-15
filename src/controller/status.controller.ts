@@ -6,10 +6,13 @@ import { validateRequest } from '../utils/validation.utils';
 import { createStatusSchema } from '../schemas/status.schema';
 import { StatusModel } from '../model/status.model';
 import mongoose from 'mongoose';
+import { getSocket, users } from '../config/socketio.config';
 
 export const createStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await validateRequest(req.body, createStatusSchema);
+    // @ts-expect-error
+    const user = req?.user;
     const { name, description, board_id } = req.body;
 
     const statusExist = await StatusModel.findOne({ name, board_id });
@@ -28,6 +31,15 @@ export const createStatusHandler = async (req: Request, res: Response, next: Nex
       board_id,
       position: nextPosition,
     });
+
+    const { io } = getSocket();
+    const socketId = users.get(user._id.toString());
+    if (socketId) {
+      io?.to(socketId).emit('receive_status', { data: status });
+    } else {
+      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+    }
+
     APIResponse(res, true, HttpStatusCode.CREATED, 'Status successfully created', status);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
@@ -71,6 +83,8 @@ export const getStatusByBoardIdHandler = async (req: Request, res: Response, nex
 export const updateStatusHandler: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { statusId, newPosition, name, description } = req.body;
+    // @ts-expect-error
+    const user = req?.user;
 
     if (!statusId) {
       APIResponse(res, false, 400, 'statusId is required');
@@ -114,6 +128,14 @@ export const updateStatusHandler: RequestHandler = async (req: Request, res: Res
       }));
 
       await StatusModel.bulkWrite(bulkOps);
+    }
+
+    const { io } = getSocket();
+    const socketId = users.get(user._id.toString());
+    if (socketId) {
+      io?.to(socketId).emit('receive_updated_status', { data: movingStatus });
+    } else {
+      console.warn(`No socket connection found for user: ${user._id.toString()}`);
     }
 
     const message =

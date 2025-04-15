@@ -1,20 +1,20 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, RequestHandler, NextFunction } from 'express';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { addTaskLabelSchema } from '../schemas/task.schema';
+import { addTaskMemberSchema, createTaskSchema } from '../schemas/task.schema';
 import { getSocket, users } from '../config/socketio.config';
-import { TaskLabelModel } from '../model/taskLabel.model';
+import { TaskMemberModel } from '../model/taskMember.model';
 
-export const addTaskLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
+export const addTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await validateRequest(req.body, addTaskLabelSchema);
+    await validateRequest(req.body, addTaskMemberSchema);
     // @ts-expect-error
     const user = req?.user;
-    const { task_id, label_id } = req.body;
+    const { task_id, member_id } = req.body;
     const taskExist = await TaskModel.findOne({ _id: task_id });
 
     if (!taskExist) {
@@ -22,26 +22,26 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       return;
     }
 
-    const taskLabelExist = await TaskLabelModel.findOne({ task_id, label_id });
-    if (taskLabelExist) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Label already exist in this task..!');
+    const taskMemberExist = await TaskMemberModel.findOne({ task_id, member_id });
+    if (taskMemberExist) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Member already joined this task..!');
       return;
     }
 
-    const newTaskLabel = await TaskLabelModel.create({
+    const newTaskMember = await TaskMemberModel.create({
       task_id,
-      label_id,
+      member_id,
     });
 
     const { io } = getSocket();
     const socketId = users.get(user._id.toString());
     if (socketId) {
-      io?.to(socketId).emit('recieve-tasklabel', { data: newTaskLabel });
+      io?.to(socketId).emit('task-member-joined', { data: newTaskMember });
     } else {
       console.warn(`No socket connection found for user: ${user._id.toString()}`);
     }
 
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', newTaskLabel);
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', newTaskMember);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
@@ -51,20 +51,21 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
   }
 };
 
-export const getTaskLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
+export const getTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { taskId } = req.params;
-    const taskLabel = await TaskLabelModel.find({ task_id: taskId })
+    const taskMembers = await TaskMemberModel.find({ task_id: taskId })
+
       .populate({
         path: 'task_id',
         select: '_id title description board_id status_list_id position position',
       })
       .populate({
-        path: 'label_id',
-        select: '_id name backgroundColor textColor boardId',
+        path: 'member_id',
+        select: '_id first_name  middle_name last_name email profile_image',
       });
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Task label successfully fetched', taskLabel);
+    APIResponse(res, true, HttpStatusCode.OK, 'Task member successfully fetched', taskMembers);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -72,20 +73,20 @@ export const getTaskLabelHandler = async (req: Request, res: Response, next: Nex
   }
 };
 
-export const deleteTaskLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
+export const deleteTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { id } = req.params;
-    const taskLabelExist = await TaskLabelModel.findOne({ _id: id });
-    if (!taskLabelExist) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task label not found..!');
+    const taskMemberExist = await TaskMemberModel.findOne({ _id: id });
+    if (!taskMemberExist) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task member not found..!');
       return;
     }
-    const taskLabel = await TaskLabelModel.findByIdAndDelete({ _id: id }, { session });
+    const taksMember = await TaskMemberModel.findByIdAndDelete({ _id: id }, { session });
     await session.commitTransaction();
     session.endSession();
-    APIResponse(res, true, HttpStatusCode.OK, 'Task label successfully removed', taskLabel);
+    APIResponse(res, true, HttpStatusCode.OK, 'Task member successfully removed', taksMember);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

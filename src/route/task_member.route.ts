@@ -1,6 +1,6 @@
 import express from 'express';
 import userMiddleware from '../middleware/user.middleware';
-import { addTaskMemberHandler, deleteTaskMemberHandler, getTaskMemberHandler } from '../controller/task.controller';
+import { addTaskMemberHandler, deleteTaskMemberHandler, getTaskMemberHandler } from '../controller/taskmember.controller';
 
 const taskRouter = express.Router();
 
