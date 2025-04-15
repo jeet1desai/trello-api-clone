@@ -522,3 +522,69 @@ export const sendBoardInviteEmail = async ({
 
   await sendEmail(mailOptions);
 };
+
+export const getBoardsController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    // @ts-expect-error
+    const user = req.user;
+
+    const boards = await BoardModel.aggregate(getBoardListQuery(user._id.toString()));
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', boards);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+const getBoardListQuery = (userId: string): PipelineStage[] => {
+  return [
+    // Find boards where the user is a member or admin
+    {
+      $lookup: {
+        from: 'members',
+        let: { boardId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $eq: ['$boardId', '$$boardId'] }, { $eq: ['$memberId', convertObjectId(userId)] }],
+              },
+            },
+          },
+        ],
+        as: 'membership',
+      },
+    },
+    { $match: { $expr: { $gt: [{ $size: '$membership' }, 0] } } },
+    // Get all members of the board
+    {
+      $lookup: {
+        from: 'members',
+        let: { boardId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$boardId', '$$boardId'] } } },
+          {
+            $lookup: {
+              from: 'users',
+              let: { memberId: '$memberId' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$_id', '$$memberId'] } } },
+                { $project: { _id: 1, first_name: 1, middle_name: 1, last_name: 1, email: 1 } },
+              ],
+              as: 'user',
+            },
+          },
+          { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+          { $project: { _id: 1, role: 1, user: 1 } },
+        ],
+        as: 'members',
+      },
+    },
+    // Lookup workspace details
+    { $lookup: { from: 'workspaces', localField: 'workspaceId', foreignField: '_id', as: 'workspace' } },
+    { $unwind: { path: '$workspace', preserveNullAndEmptyArrays: true } },
+    { $project: { _id: 1, name: 1, description: 1, members: 1, workspace: 1 } },
+  ];
+};
