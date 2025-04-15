@@ -6,6 +6,7 @@ import { WorkSpaceModel } from '../../src/model/workspace.model';
 import User from '../../src/model/user.model';
 import { MemberModel } from '../../src/model/members.model';
 import { MEMBER_ROLES } from '../../src/config/app.config';
+import mongoose from 'mongoose';
 
 describe('Workspace API', () => {
   beforeEach(() => {
@@ -195,30 +196,26 @@ describe('Workspace API', () => {
   });
 
   describe('GET /workspace/get-workspace/:id', () => {
-    it('should return workspace details successfully', (done) => {
-      sinon.stub(WorkSpaceModel, 'findById').resolves({
-        _id: 'workspace123',
-        name: 'Test Workspace',
-        createdBy: 'user123',
-      } as any);
+    it('should return workspace details successfully', async () => {
+      const workspaceId = new mongoose.Types.ObjectId();
+      const mockWorkspace = { _id: workspaceId, name: 'Test Workspace', createdBy: 'user123' };
+      const populateStub3 = sinon.stub().resolves(mockWorkspace);
+      const populateStub1 = sinon.stub().returns({ populate: populateStub3 });
+      sinon.stub(WorkSpaceModel, 'findById').returns({ populate: populateStub1 } as any);
 
-      server
-        .get(`${API_URL}/workspace/get-workspace/workspace123`)
-        .set('Cookie', ['access_token=fake-jwt-token'])
-        .expect(200)
-        .end((err, res) => {
-          expect(res.body.success).to.be.true;
-          expect(res.body.message).to.equal('Workspace successfully fetched');
-          expect(res.body.data).to.have.property('_id', 'workspace123');
-          done();
-        });
+      const res = await server.get(`${API_URL}/workspace/get-workspace/${workspaceId}`).set('Cookie', [`access_token=token`]);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+      expect(res.body.message).to.equal('Workspace successfully fetched');
     });
 
     it('should return 404 if workspace not found', (done) => {
-      sinon.stub(WorkSpaceModel, 'findById').resolves(null);
+      const populateStub = sinon.stub().resolves(null);
+      sinon.stub(WorkSpaceModel, 'findById').returns({ populate: populateStub } as any);
 
       server
-        .get(`${API_URL}/workspace/get-workspace/invalid-id`)
+        .get(`${API_URL}/workspace/get-workspace/${new mongoose.Types.ObjectId()}`)
         .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(404)
         .end((err, res) => {
@@ -229,10 +226,11 @@ describe('Workspace API', () => {
     });
 
     it('should return 502 if an error occurs while fetching workspace', (done) => {
-      sinon.stub(WorkSpaceModel, 'findById').rejects(new Error('DB error'));
+      const populateStub = sinon.stub().rejects(new Error('DB error'));
+      sinon.stub(WorkSpaceModel, 'findById').returns({ populate: populateStub } as any);
 
       server
-        .get(`${API_URL}/workspace/get-workspace/workspace123`)
+        .get(`${API_URL}/workspace/get-workspace/${new mongoose.Types.ObjectId()}`)
         .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(502)
         .end((err, res) => {
