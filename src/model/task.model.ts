@@ -5,7 +5,11 @@ export interface TaskModelType {
   _id?: mongoose.Schema.Types.ObjectId;
   title?: string;
   description?: string;
-  attachment: string[];
+  attachment: {
+    imageName: string;
+    imageId: string;
+    url: string;
+  }[];
   board_id?: mongoose.Types.ObjectId;
   status_list_id?: mongoose.Types.ObjectId;
   created_by?: mongoose.Types.ObjectId;

@@ -10,3 +10,10 @@ export const commentSchema = Joi.object({
     'any.required': 'Task id is required',
   }),
 });
+
+export const updateCommentSchema = Joi.object({
+  comment: Joi.string().required().trim().messages({
+    'string.empty': 'Comment is required',
+    'any.required': 'Comment is required',
+  }),
+});

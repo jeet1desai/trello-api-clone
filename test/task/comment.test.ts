@@ -5,8 +5,10 @@ import jwt from 'jsonwebtoken';
 import User from '../../src/model/user.model';
 import mongoose from 'mongoose';
 import { TaskModel } from '../../src/model/task.model';
-import { getSocket } from '../../src/config/socketio.config';
+import { getSocket, users } from '../../src/config/socketio.config';
 import { CommentModel } from '../../src/model/comment.model';
+import * as utils from '../../src/helper/saveMultipleFiles';
+import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -151,16 +153,40 @@ describe('Comment Management API', function () {
   });
 
   describe('Update /comment/update profile', () => {
+    afterEach(() => {
+      sinon.restore();
+      users.clear();
+    });
     it('should update comment successfully', function (done) {
-      sinon.stub(CommentModel, 'findByIdAndUpdate').returns({
-        select: sinon.stub().resolves({
-          _id: '67f74b031fb8c5dfe56d739f',
-          email: 'test@example.com',
-        }),
-      } as any);
+      const fakeCommentId = '67f74b031fb8c5dfe56d739f';
+
+      // Mock the existing comment
+      const existingComment = {
+        _id: fakeCommentId,
+        attachment: [],
+      };
+
+      // Mock the updated comment
+      const updatedComment = {
+        _id: fakeCommentId,
+        comment: 'Test Comment Updated',
+        attachment: [],
+      };
+
+      // Stub for findById (for fetching existing comment)
+      sinon
+        .stub(CommentModel, 'findById')
+        .withArgs(fakeCommentId)
+        .returns({
+          // Simulate Mongoose chain for `.lean()`
+          lean: sinon.stub().resolves(updatedComment),
+        } as any);
+
+      // Stub for findByIdAndUpdate (used twice in handler)
+      sinon.stub(CommentModel, 'findByIdAndUpdate').resolves({}); // no need to return actual data
 
       server
-        .put(`${API_URL}/comment/update/67f74b031fb8c5dfe56d739f`)
+        .put(`${API_URL}/comment/update/${fakeCommentId}`)
         .set('Cookie', ['access_token=fake-jwt-token'])
         .send({
           comment: 'Test Comment Updated',
@@ -169,9 +195,11 @@ describe('Comment Management API', function () {
         .end((err, res) => {
           expect(res.body.success).to.be.true;
           expect(res.body.message).to.equal('Comment successfully updated');
+          expect(res.body.data.comment).to.equal('Test Comment Updated');
           done();
         });
     });
+
     it('should return 502 if bad gateway', (done) => {
       sinon.stub(CommentModel, 'findByIdAndUpdate').resolves(null);
 
@@ -187,13 +215,88 @@ describe('Comment Management API', function () {
           done();
         });
     });
+
+    it('should return 400 for invalid deletedAttachments format', function (done) {
+      server
+        .put(`${API_URL}/comment/update/123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .send({
+          comment: 'test',
+          deletedAttachments: 'not-an-array',
+        })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Invalid deletedAttachments format. Expected JSON array of image IDs');
+          done();
+        });
+    });
+
+    it('should return 400 for invalid deletedAttachments format', function (done) {
+      server
+        .put(`${API_URL}/comment/update/123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .send({
+          comment: 'test',
+          deletedAttachments: 'not-an-array',
+        })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Invalid deletedAttachments format. Expected JSON array of image IDs');
+          done();
+        });
+    });
+
+    it('should return 404 if comment not found', async function () {
+      sinon.stub(CommentModel, 'findById').resolves(null);
+
+      await server.put(`${API_URL}/comment/update/999`).set('Cookie', ['access_token=fake-jwt-token']).send({ comment: 'Hello' }).expect(404);
+    });
+
+    it('should return 400 if deletedAttachments contain invalid imageIds', async function () {
+      sinon.stub(CommentModel, 'findById').resolves({
+        attachment: [{ imageId: 'existing1' }],
+      });
+
+      await server
+        .put(`${API_URL}/comment/update/123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .send({
+          comment: 'test',
+          deletedAttachments: JSON.stringify(['nonexisting1']),
+        })
+        .expect(400);
+    });
+
+    it('should upload new attachments and update comment', async () => {
+      const fakeUploadResult = [{ imageId: 'img123', url: 'http://url.com/image.jpg', imageName: 'file.jpg' }];
+      sinon.stub(CommentModel, 'findById').resolves({ _id: '123', attachment: [] });
+      sinon.stub(CommentModel, 'findByIdAndUpdate').resolvesArg(1);
+      sinon.stub(mongoose, 'startSession').resolves({ endSession() {}, startTransaction() {}, commitTransaction() {} } as any);
+      sinon.stub(utils, 'saveMultipleFilesToCloud').resolves(fakeUploadResult);
+      const emitStub = sinon.stub();
+      sinon.stub(getSocket(), 'io').value({ to: () => ({ emit: emitStub }) });
+
+      await server
+        .put(`${API_URL}/comment/update/123`)
+        .set('Cookie', ['access_token=fake-jwt-token'])
+        .attach('attachment', Buffer.from('fake file'), 'file.jpg')
+        .field('comment', 'Test with file');
+    });
   });
 
   describe('DELETE /comment/delete/:id', () => {
-    it('should delete a task lable by ID', async () => {
+    it('should delete a task comment by ID', async () => {
       const commentId = 'tm1';
 
-      sinon.stub(CommentModel, 'findOne').withArgs({ _id: commentId }).resolves({ _id: commentId });
+      sinon
+        .stub(CommentModel, 'findOne')
+        .withArgs({ _id: commentId })
+        .resolves({
+          _id: commentId,
+          attachment: [{ imageId: 'image1' }, { imageId: 'image2' }],
+        });
 
       const sessionStub: any = {
         startTransaction: sinon.stub(),
@@ -202,8 +305,17 @@ describe('Comment Management API', function () {
         endSession: sinon.stub(),
       };
 
-      sinon.stub(mongoose, 'startSession').resolves(sessionStub as any);
-      sinon.stub(CommentModel, 'findByIdAndDelete').withArgs({ _id: commentId }, { session: sessionStub }).resolves({ _id: commentId });
+      sinon.stub(mongoose, 'startSession').resolves(sessionStub);
+
+      sinon
+        .stub(CommentModel, 'findByIdAndDelete')
+        .withArgs({ _id: commentId })
+        .resolves({
+          _id: commentId,
+          attachment: [{ imageId: 'image1' }, { imageId: 'image2' }],
+        });
+
+      sinon.stub(fileUpload, 'deleteFromCloudinary').resolves({ result: 'ok' } as any);
 
       await server
         .delete(`${API_URL}/comment/delete/${commentId}`)
@@ -212,6 +324,14 @@ describe('Comment Management API', function () {
         .then((res) => {
           expect(res.body.message).to.equal('Comment successfully removed');
         });
+
+      // Assertions to ensure the correct flow occurred
+      sinon.assert.calledOnce(sessionStub.startTransaction);
+      sinon.assert.calledOnce(sessionStub.commitTransaction);
+      sinon.assert.calledOnce(sessionStub.endSession);
+
+      // Cleanup the stubs
+      sinon.restore();
     });
     it('should return 400 if task not found', (done) => {
       const findOneStub = sinon.stub(CommentModel, 'findOne').resolves(null);
