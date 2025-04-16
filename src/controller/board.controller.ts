@@ -15,6 +15,7 @@ import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
 import { getSocket, users } from '../config/socketio.config';
 import { NotificationModel } from '../model/notification.model';
+import { emitToUser } from '../utils/socket';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -90,12 +91,7 @@ export const createBoardController = async (req: express.Request, res: express.R
             sender: convertObjectId(user._id.toString()),
           });
 
-          const socketId = users.get(existingUser._id.toString());
-          if (socketId) {
-            io?.to(socketId).emit('receive_notification', { data: notification });
-          } else {
-            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
-          }
+          emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
         }
 
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: invite._id.toString() });
@@ -180,12 +176,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             sender: convertObjectId(user._id.toString()),
           });
 
-          const socketId = users.get(existingUser._id.toString());
-          if (socketId) {
-            io?.to(socketId).emit('receive_notification', { data: notification });
-          } else {
-            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
-          }
+          emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
 
           await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: existingInvite._id.toString() });
           continue;
@@ -200,12 +191,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             sender: convertObjectId(user._id.toString()),
           });
 
-          const socketId = users.get(existingUser._id.toString());
-          if (socketId) {
-            io?.to(socketId).emit('receive_notification', { data: notification });
-          } else {
-            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
-          }
+          emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
 
           await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: existingInvite._id.toString() });
           continue;
@@ -229,12 +215,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             sender: convertObjectId(user._id.toString()),
           });
 
-          const socketId = users.get(existingUser._id.toString());
-          if (socketId) {
-            io?.to(socketId).emit('receive_notification', { data: notification });
-          } else {
-            console.warn(`No socket connection found for user: ${existingUser._id.toString()}`);
-          }
+          emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
         }
 
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: newInvite._id.toString() });
@@ -286,7 +267,6 @@ export const deleteBoardController = async (req: express.Request, res: express.R
 
     for (const member of membersToNotify) {
       const userToNotify = member.memberId;
-
       const [notification] = await NotificationModel.create(
         [
           {
@@ -298,13 +278,7 @@ export const deleteBoardController = async (req: express.Request, res: express.R
         ],
         { session }
       );
-
-      const socketId = users.get(userToNotify);
-      if (socketId) {
-        io?.to(socketId).emit('receive_notification', { data: notification });
-      } else {
-        console.warn(`No socket connection found for user: ${userToNotify}`);
-      }
+      emitToUser(io, userToNotify?.toString(), 'receive_notification', { data: notification });
     }
 
     await session.commitTransaction();

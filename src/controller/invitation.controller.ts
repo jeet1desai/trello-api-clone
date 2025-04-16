@@ -13,6 +13,7 @@ import { WorkSpaceModel } from '../model/workspace.model';
 import { sendBoardInviteEmail } from './board.controller';
 import { NotificationModel } from '../model/notification.model';
 import { getSocket, users } from '../config/socketio.config';
+import { emitToUser } from '../utils/socket';
 
 export const getInvitationDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -84,12 +85,7 @@ export const updateInvitationDetailController = async (req: express.Request, res
       sender: user._id,
     });
 
-    const socketId = users.get(invitation.invitedBy);
-    if (socketId) {
-      io?.to(socketId).emit('receive_notification', { data: notification });
-    } else {
-      console.warn(`No socket connection found for user: ${invitation.invitedBy}`);
-    }
+    emitToUser(io, invitation.invitedBy?.toString(), 'receive_notification', { data: notification });
 
     invitation.status = status;
     const updatedInvitation = await invitation.save();
