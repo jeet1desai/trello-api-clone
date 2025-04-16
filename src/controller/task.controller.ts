@@ -5,8 +5,10 @@ import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { createTaskSchema } from '../schemas/task.schema';
+import { attachmentSchema, createTaskSchema } from '../schemas/task.schema';
 import { getSocket, users } from '../config/socketio.config';
+import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
+import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -228,6 +230,112 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
 
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const uploadAttachmentHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { task_id } = req.body;
+    await validateRequest(req.body, attachmentSchema);
+
+    const attachments = req.files as Express.Multer.File[];
+
+    if (!attachments?.length) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'No files uploaded');
+      return;
+    }
+
+    const taskExist = await TaskModel.findOne({ _id: task_id });
+    if (!taskExist) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    const uploadResponse = await saveMultipleFilesToCloud(attachments, 'tasks');
+
+    const attachmentsData = uploadResponse.map((result) => ({
+      imageId: result.imageId,
+      url: result.url,
+      imageName: result.imageName,
+    }));
+
+    const updateAttachment = await TaskModel.findByIdAndUpdate(
+      task_id,
+      {
+        $push: {
+          attachment: {
+            $each: attachmentsData,
+          },
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
+    return;
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+  }
+};
+
+export const deleteAttachmentHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { taskId, imageId } = req.query;
+
+    const taskExist = await TaskModel.findOne({ _id: taskId });
+    if (!taskExist) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    const attachmentData: any = taskExist.attachment.find((item: any) => item._id == imageId);
+    if (!attachmentData?.imageId) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Image not found..!');
+      return;
+    }
+    const result = await deleteFromCloudinary(attachmentData.imageId);
+    const removeImage = taskExist.attachment.filter((item: any) => item._id != imageId);
+
+    const updateAttachment = await TaskModel.findByIdAndUpdate(taskId, {
+      attachment: removeImage,
+    });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted');
+    return;
+  } catch (err) {
+    if (err instanceof mongoose.Error.CastError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid task ID');
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+  }
+};
+
+export const getAttachmentHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { taskId } = req.query;
+
+    const taskExist = await TaskModel.findOne({ _id: taskId });
+    if (!taskExist) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Attachments fetched successfully', taskExist.attachment);
+    return;
+  } catch (err) {
+    if (err instanceof mongoose.Error.CastError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid task ID');
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
     }
   }
 };

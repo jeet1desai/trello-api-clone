@@ -36,3 +36,10 @@ export const addTaskLabelSchema = Joi.object({
     'any.required': 'Label id is required',
   }),
 });
+
+export const attachmentSchema = Joi.object({
+  task_id: Joi.string().required().trim().messages({
+    'string.empty': 'Task id is required',
+    'any.required': 'Task id is required',
+  }),
+});
