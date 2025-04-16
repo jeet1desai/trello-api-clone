@@ -29,7 +29,9 @@ const schema = new mongoose.Schema<TaskModelType>(
     },
     attachment: [
       {
-        type: String,
+        imageName: { type: String, required: true },
+        imageId: { type: String, required: true },
+        url: { type: String, required: true },
       },
     ],
     board_id: {

@@ -4,9 +4,10 @@ import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
 import User from '../../src/model/user.model';
 import mongoose from 'mongoose';
-import { BoardModel } from '../../src/model/board.model';
 import { StatusModel } from '../../src/model/status.model';
 import { TaskModel } from '../../src/model/task.model';
+import * as fileHelper from '../../src/helper/saveMultipleFiles';
+import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -23,6 +24,14 @@ const taskMock = {
   created_by: 'user123',
   position: 1,
 };
+
+const uploadMock = [
+  {
+    imageId: 'img1',
+    url: 'https://cdn.example.com/task/img1.png',
+    imageName: 'img1.png',
+  },
+];
 
 describe('Task Management API', function () {
   let findOneStub: sinon.SinonStub;
@@ -377,6 +386,282 @@ describe('Task Management API', function () {
         .end((err, res) => {
           expect(res.body.success).to.be.false;
           expect(res.body.message).to.equal(errorMessage);
+          done();
+        });
+    });
+  });
+
+  describe('POST /task/attachment', () => {
+    let findOneStub: sinon.SinonStub;
+    let findByIdAndUpdateStub: sinon.SinonStub;
+    let saveMultipleFilesStub: sinon.SinonStub;
+
+    afterEach(() => {
+      sinon.restore();
+    });
+    it('should upload attachments successfully', (done) => {
+      findOneStub = sinon.stub(TaskModel, 'findOne').resolves(taskMock as any);
+      findByIdAndUpdateStub = sinon.stub(TaskModel, 'findByIdAndUpdate').resolves({
+        ...taskMock,
+        attachment: uploadMock,
+      });
+
+      saveMultipleFilesStub = sinon.stub(fileHelper, 'saveMultipleFilesToCloud').resolves(uploadMock);
+
+      server
+        .post(`${API_URL}/task/attachment`)
+        .set('Cookie', ['access_token=token'])
+        .field('task_id', 'task123')
+        .attach('attachment', Buffer.from('file content'), {
+          filename: 'test.png',
+          contentType: 'image/png',
+        })
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Attachment successfully uploaded');
+          expect(findOneStub.calledOnce).to.be.true;
+          done();
+        });
+    });
+    it('should return 400 if no files are uploaded', (done) => {
+      server
+        .post(`${API_URL}/task/attachment`)
+        .set('Cookie', ['access_token=token'])
+        .field('task_id', 'task123')
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('No files uploaded');
+          done();
+        });
+    });
+
+    it('should return 400 if task not found', (done) => {
+      findOneStub = sinon.stub(TaskModel, 'findOne').resolves(null);
+
+      server
+        .post(`${API_URL}/task/attachment`)
+        .set('Cookie', ['access_token=token'])
+        .field('task_id', 'invalid_task')
+        .attach('attachment', Buffer.from('file content'), {
+          filename: 'test.png',
+          contentType: 'image/png',
+        })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Task not found..!');
+          done();
+        });
+    });
+
+    it('should return 500 if upload throws error', (done) => {
+      findOneStub = sinon.stub(TaskModel, 'findOne').resolves(taskMock as any);
+      saveMultipleFilesStub = sinon.stub(fileHelper, 'saveMultipleFilesToCloud').throws(new Error('Upload failed'));
+
+      server
+        .post(`${API_URL}/task/attachment`)
+        .set('Cookie', ['access_token=token'])
+        .field('task_id', 'task123')
+        .attach('attachment', Buffer.from('file content'), {
+          filename: 'test.png',
+          contentType: 'image/png',
+        })
+        .expect(500)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Upload failed');
+          done();
+        });
+    });
+
+    it('should return validation error', (done) => {
+      sinon.stub(TaskModel, 'create').rejects(new Error('DB error'));
+
+      server
+        .post(`${API_URL}/task/attachment`)
+        .set('Cookie', ['access_token=token'])
+        .attach('attachment', Buffer.from('file content'), {
+          filename: 'test.png',
+          contentType: 'image/png',
+        })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Task id is required');
+          done();
+        });
+    });
+  });
+
+  describe('GET /task/get-attachment', () => {
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    it('should return attachments successfully', (done) => {
+      const mockTask = {
+        _id: 'abc123',
+        attachment: [{ imageId: 'img1', url: 'http://cdn.com/img1.jpg', imageName: 'file1.jpg' }],
+      };
+
+      sinon.stub(TaskModel, 'findOne').resolves(mockTask as any);
+
+      server
+        .get(`${API_URL}/task/get-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'abc123' })
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Attachments fetched successfully');
+          expect(res.body.data).to.deep.equal(mockTask.attachment);
+          done();
+        });
+    });
+
+    it('should return 400 if task not found', (done) => {
+      sinon.stub(TaskModel, 'findOne').resolves(null);
+
+      server
+        .get(`${API_URL}/task/get-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'nonexistent' })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Task not found..!');
+          done();
+        });
+    });
+
+    it('should return 400 for invalid task ID', (done) => {
+      const castError = new mongoose.Error.CastError('ObjectId', 'invalid-id', '_id');
+
+      sinon.stub(TaskModel, 'findOne').throws(castError);
+
+      server
+        .get(`${API_URL}/task/get-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'invalid-id' })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Invalid task ID');
+          done();
+        });
+    });
+
+    it('should handle unexpected server error', (done) => {
+      sinon.stub(TaskModel, 'findOne').throws(new Error('DB down'));
+
+      server
+        .get(`${API_URL}/task/get-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'abc123' })
+        .expect(500)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('DB down');
+          done();
+        });
+    });
+  });
+
+  describe('DELETE /task/delete-attachment', () => {
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    it('should return 400 if task not found', (done) => {
+      sinon.stub(TaskModel, 'findOne').resolves(null);
+
+      server
+        .delete(`${API_URL}/task/delete-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'abc123', imageId: 'img1' })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Task not found..!');
+          done();
+        });
+    });
+
+    it('should return 400 if image not found in task', (done) => {
+      const mockTask = {
+        _id: 'abc123',
+        attachment: [],
+      };
+
+      sinon.stub(TaskModel, 'findOne').resolves(mockTask as any);
+
+      server
+        .delete(`${API_URL}/task/delete-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'abc123', imageId: 'img1' })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Image not found..!');
+          done();
+        });
+    });
+
+    it('should delete the attachment successfully', (done) => {
+      const mockTask = {
+        _id: 'abc123',
+        attachment: [
+          { _id: 'img1', imageId: 'cloud123' },
+          { _id: 'img2', imageId: 'cloud456' },
+        ],
+      };
+
+      sinon.stub(TaskModel, 'findOne').resolves(mockTask as any);
+      sinon.stub(TaskModel, 'findByIdAndUpdate').resolves({} as any);
+      sinon.stub(fileUpload, 'deleteFromCloudinary').resolves({ result: 'ok' } as any);
+
+      server
+        .delete(`${API_URL}/task/delete-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'abc123', imageId: 'img1' })
+        .expect(200)
+        .end((err, res) => {
+          expect(res.body.success).to.be.true;
+          expect(res.body.message).to.equal('Attachment successfully deleted');
+          done();
+        });
+    });
+
+    it('should return 400 for invalid task ID', (done) => {
+      const castError = new mongoose.Error.CastError('ObjectId', 'invalid-id', '_id');
+
+      sinon.stub(TaskModel, 'findOne').throws(castError);
+
+      server
+        .delete(`${API_URL}/task/delete-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'invalid-id', imageId: 'img1' })
+        .expect(400)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('Invalid task ID');
+          done();
+        });
+    });
+
+    it('should handle unexpected error', (done) => {
+      sinon.stub(TaskModel, 'findOne').throws(new Error('DB crashed'));
+
+      server
+        .delete(`${API_URL}/task/delete-attachment`)
+        .set('Cookie', ['access_token=token'])
+        .query({ taskId: 'abc123', imageId: 'img1' })
+        .expect(500)
+        .end((err, res) => {
+          expect(res.body.success).to.be.false;
+          expect(res.body.message).to.equal('DB crashed');
           done();
         });
     });
