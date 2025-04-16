@@ -9,6 +9,7 @@ import { BoardInviteModel } from '../model/boardInvite.model';
 import User from '../model/user.model';
 import { NotificationModel } from '../model/notification.model';
 import { getSocket, users } from '../config/socketio.config';
+import { emitToUser } from '../utils/socket';
 
 export const getMemberListController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -99,12 +100,7 @@ export const removeMemberController = async (req: express.Request, res: express.
       { session }
     );
 
-    const socketId = users.get(uid);
-    if (socketId) {
-      io?.to(socketId).emit('receive_notification', { data: notification });
-    } else {
-      console.warn(`No socket connection found for user: ${uid}`);
-    }
+    emitToUser(io, uid, 'receive_notification', { data: notification });
 
     await session.commitTransaction();
     session.endSession();
