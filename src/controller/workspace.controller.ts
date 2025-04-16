@@ -73,7 +73,7 @@ export const getWorkSpaceDetailController = async (req: express.Request, res: ex
   try {
     const { id } = req.params;
 
-    const workspace = await WorkSpaceModel.findById({ _id: id });
+    const workspace = await WorkSpaceModel.findById({ _id: id }).populate('createdBy', 'first_name last_name email');
 
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
