@@ -19,11 +19,13 @@ import jwt from 'jsonwebtoken';
 import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
 import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
+import { saveFileToCloud } from '../utils/cloudinaryFileUpload';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     await validateRequest(request.body, signupSchema);
     const reqBody = await request.body;
+    const profileImage = request.file;
     const { password, email } = reqBody;
     const user = await User.findOne({ email });
 
@@ -31,11 +33,18 @@ const Signup: RequestHandler = async (request: Request, response: Response, next
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User already exists..!');
       return;
     }
+
+    let imageRes = {};
+    if (profileImage) {
+      imageRes = await saveFileToCloud(profileImage, 'profile');
+    }
+
     const salt = await bcryptJS.genSalt(10);
     const hashedPassword = await bcryptJS.hash(password, salt);
     const newUser = {
       ...reqBody,
       password: hashedPassword,
+      profile_image: imageRes,
     };
     const userCreated = await User.create(newUser);
     if (!userCreated) {

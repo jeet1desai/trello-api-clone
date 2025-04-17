@@ -3,12 +3,17 @@ import { expect } from 'chai';
 import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
 import User from '../../src/model/user.model';
+import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
 
 describe('User Management API', function () {
   this.timeout(7000);
 
   beforeEach(() => {
-    sinon.stub(jwt, 'verify').returns({ _id: '67f74b031fb8c5dfe56d739f', email: 'test@example.com' } as any);
+    sinon.stub(jwt, 'verify').returns({
+      _id: '67f74b031fb8c5dfe56d739f',
+      email: 'test@example.com',
+      profile_image: { imageId: 'cloudinary-image-id', url: 'https://cloudinary.com/fake-image.png', imageName: 'test.png' },
+    } as any);
   });
 
   afterEach(() => {
@@ -51,11 +56,21 @@ describe('User Management API', function () {
         }),
       } as any);
 
+      sinon.stub(fileUpload, 'deleteFromCloudinary').resolves();
+
+      sinon.stub(fileUpload, 'saveFileToCloud').resolves({
+        imageId: 'cloudinary-image-id',
+        url: 'https://cloudinary.com/fake-image.png',
+        imageName: 'test.png',
+      });
+
       server
         .put(`${API_URL}/user/profile`)
         .set('Cookie', ['access_token=fake-jwt-token'])
-        .send({
-          first_name: 'Test Profile Updated',
+        .field('first_name', 'Test Profile Updated')
+        .attach('profile_image', Buffer.from('file content'), {
+          filename: 'test.png',
+          contentType: 'image/png',
         })
         .expect(200)
         .end((err, res) => {
