@@ -14,15 +14,38 @@ const uploadFromBuffer = (file: Express.Multer.File, folder: string): Promise<Cl
       return reject(new Error('Invalid file buffer'));
     }
 
-    if (!file.mimetype.startsWith('image/')) {
-      return reject(new Error('Only images are allowed'));
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'video/mp4',
+      'video/x-matroska',
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      return reject(new Error(`File type not allowed: ${file.mimetype}`));
+    }
+
+    let resourceType: 'image' | 'video' | 'raw' = 'raw';
+
+    if (file.mimetype.startsWith('image/')) {
+      resourceType = 'image';
+    } else if (file.mimetype.startsWith('video/')) {
+      resourceType = 'video';
+    } else {
+      resourceType = 'raw';
     }
 
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: folder,
-        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-        resource_type: 'auto',
+        resource_type: resourceType,
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'xls', 'xlsx', 'mp4', 'mkv'],
+        use_filename: true,
+        filename_override: file.originalname,
       },
       (error, result) => {
         if (error) {
@@ -39,7 +62,6 @@ const uploadFromBuffer = (file: Express.Multer.File, folder: string): Promise<Cl
       }
     );
 
-    // Pipe the buffer to Cloudinary via a Readable stream
     Readable.from(file.buffer).pipe(uploadStream);
   });
 };
