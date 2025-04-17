@@ -192,19 +192,23 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
       updated = true;
     }
 
-    if (updated) await movingTask.save();
+    let updatedtData1;
+    if (updated) {
+      await movingTask.save({ validateModifiedOnly: true });
+      updatedtData1 = await TaskModel.findById(movingTask._id);
+    }
 
     const { io } = getSocket();
     const socketId = users.get(user._id.toString());
     if (socketId) {
-      io?.to(socketId).emit('recieve-updated-task', { data: movingTask });
+      io?.to(socketId).emit('recieve-updated-task', { data: !updated ? movingTask : updatedtData1 });
     } else {
       console.warn(`No socket connection found for user: ${user._id.toString()}`);
     }
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
 
-    APIResponse(res, true, 200, message, movingTask);
+    APIResponse(res, true, 200, message, !updated ? movingTask : updatedtData1);
   } catch (err) {
     APIResponse(res, false, 500, err instanceof Error ? err.message : 'Internal Server Error');
   }
