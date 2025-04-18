@@ -9,6 +9,8 @@ import { getSocket, users } from '../../src/config/socketio.config';
 import { CommentModel } from '../../src/model/comment.model';
 import * as utils from '../../src/helper/saveMultipleFiles';
 import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
+import { TaskMemberModel } from '../../src/model/taskMember.model';
+import * as socketUtils from '../../src/utils/socket';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -46,6 +48,7 @@ describe('Comment Management API', function () {
   describe('Post /comment/add', () => {
     it('should add a task member if not already added', async () => {
       sinon.stub(TaskModel, 'findOne').withArgs({ _id: taskId }).resolves(mockTask);
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
       sinon.stub(CommentModel, 'create').resolves(newLabel);
       const emitStub = sinon.stub();
       sinon.stub(getSocket(), 'io').value({ to: () => ({ emit: emitStub }) });
@@ -172,18 +175,15 @@ describe('Comment Management API', function () {
         comment: 'Test Comment Updated',
         attachment: [],
       };
-
-      // Stub for findById (for fetching existing comment)
       sinon
         .stub(CommentModel, 'findById')
         .withArgs(fakeCommentId)
         .returns({
-          // Simulate Mongoose chain for `.lean()`
           lean: sinon.stub().resolves(updatedComment),
         } as any);
 
-      // Stub for findByIdAndUpdate (used twice in handler)
-      sinon.stub(CommentModel, 'findByIdAndUpdate').resolves({}); // no need to return actual data
+      sinon.stub(CommentModel, 'findByIdAndUpdate').resolves({});
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       server
         .put(`${API_URL}/comment/update/${fakeCommentId}`)
@@ -298,6 +298,10 @@ describe('Comment Management API', function () {
           attachment: [{ imageId: 'image1' }, { imageId: 'image2' }],
         });
 
+      const fakeMemberId = new mongoose.Types.ObjectId().toString();
+
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: fakeMemberId }]);
+
       const sessionStub: any = {
         startTransaction: sinon.stub(),
         commitTransaction: sinon.stub(),
@@ -329,8 +333,6 @@ describe('Comment Management API', function () {
       sinon.assert.calledOnce(sessionStub.startTransaction);
       sinon.assert.calledOnce(sessionStub.commitTransaction);
       sinon.assert.calledOnce(sessionStub.endSession);
-
-      // Cleanup the stubs
       sinon.restore();
     });
     it('should return 400 if task not found', (done) => {

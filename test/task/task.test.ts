@@ -8,6 +8,7 @@ import { StatusModel } from '../../src/model/status.model';
 import { TaskModel } from '../../src/model/task.model';
 import * as fileHelper from '../../src/helper/saveMultipleFiles';
 import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
+import { TaskMemberModel } from '../../src/model/taskMember.model';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -138,7 +139,10 @@ describe('Task Management API', function () {
     });
   });
 
-  describe('Update /task/get-task', () => {
+  describe('Update /task/updated-task', () => {
+    afterEach(() => {
+      sinon.restore();
+    });
     it('should update a task successfully', (done) => {
       const taskId = 'task123';
       const body = {
@@ -221,7 +225,8 @@ describe('Task Management API', function () {
     it('should reorder tasks and update status_list_id when status list changes', async function () {
       const taskId = 'task1';
       const oldStatusListId = 'status1';
-      const newStatusListId = 'status2';
+      const newStatusListId = 'status21';
+      const newPosition = 2;
 
       const movingTask = {
         _id: taskId,
@@ -234,23 +239,39 @@ describe('Task Management API', function () {
 
       const oldListTasks = [{ _id: 'task2' }, { _id: 'task3' }];
 
-      const newListTasks = [{ _id: 'task4' }, { _id: 'task5' }];
+      const newListTasks = [
+        { _id: 'task4', position: 1 },
+        { _id: 'task5', position: 2 },
+      ];
 
+      const findStub: any = sinon.stub(TaskModel, 'find');
+
+      findStub
+        .withArgs({
+          status_list_id: oldStatusListId,
+          _id: { $ne: taskId },
+        })
+        .returns({
+          sort: sinon.stub().withArgs('position').resolves(oldListTasks),
+        } as any);
+
+      findStub
+        .withArgs({
+          status_list_id: newStatusListId,
+          _id: { $ne: taskId },
+        })
+        .returns({
+          sort: sinon.stub().withArgs('position').resolves(newListTasks),
+        } as any);
+
+      sinon.stub(TaskModel, 'bulkWrite').resolves();
       sinon
         .stub(TaskModel, 'findById')
         .withArgs(taskId)
-        .resolves(movingTask as any);
-
-      const findStub: any = sinon.stub(TaskModel, 'find');
-      findStub.withArgs({ status_list_id: oldStatusListId, _id: { $ne: taskId } }).returns({
-        sort: sinon.stub().withArgs('position').resolves(oldListTasks),
-      } as any);
-
-      findStub.withArgs({ status_list_id: newStatusListId }).returns({
-        sort: sinon.stub().withArgs('position').resolves(newListTasks),
-      } as any);
-
-      const bulkWriteStub = sinon.stub(TaskModel, 'bulkWrite').resolves();
+        .resolves({
+          ...movingTask,
+          position: newPosition,
+        });
 
       await server
         .put(`${API_URL}/task/update-task`)
@@ -258,15 +279,15 @@ describe('Task Management API', function () {
         .send({
           taskId,
           status_list_id: newStatusListId,
+          newPosition: 2,
         })
         .expect(200)
         .then((res) => {
           expect(res.body.message).to.equal('Task updated successfully');
-          expect(bulkWriteStub.calledOnce).to.be.true;
-          expect(movingTask.status_list_id).to.equal(newStatusListId);
-          expect(movingTask.position).to.equal(newListTasks.length + 1); // inserted at end
+          expect(movingTask.position).to.equal(newPosition);
         });
     });
+
     it('should reorder task positions within same status list', async function () {
       const taskId = 'task1';
       const statusListId = 'status1';
@@ -405,6 +426,7 @@ describe('Task Management API', function () {
         ...taskMock,
         attachment: uploadMock,
       });
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       saveMultipleFilesStub = sinon.stub(fileHelper, 'saveMultipleFilesToCloud').resolves(uploadMock);
 
@@ -459,6 +481,7 @@ describe('Task Management API', function () {
     it('should return 500 if upload throws error', (done) => {
       findOneStub = sinon.stub(TaskModel, 'findOne').resolves(taskMock as any);
       saveMultipleFilesStub = sinon.stub(fileHelper, 'saveMultipleFilesToCloud').throws(new Error('Upload failed'));
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       server
         .post(`${API_URL}/task/attachment`)
@@ -576,6 +599,7 @@ describe('Task Management API', function () {
 
     it('should return 400 if task not found', (done) => {
       sinon.stub(TaskModel, 'findOne').resolves(null);
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       server
         .delete(`${API_URL}/task/delete-attachment`)
@@ -596,6 +620,7 @@ describe('Task Management API', function () {
       };
 
       sinon.stub(TaskModel, 'findOne').resolves(mockTask as any);
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       server
         .delete(`${API_URL}/task/delete-attachment`)
@@ -621,6 +646,7 @@ describe('Task Management API', function () {
       sinon.stub(TaskModel, 'findOne').resolves(mockTask as any);
       sinon.stub(TaskModel, 'findByIdAndUpdate').resolves({} as any);
       sinon.stub(fileUpload, 'deleteFromCloudinary').resolves({ result: 'ok' } as any);
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       server
         .delete(`${API_URL}/task/delete-attachment`)

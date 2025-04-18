@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { TaskModel } from '../../src/model/task.model';
 import { getSocket } from '../../src/config/socketio.config';
 import { TaskLabelModel } from '../../src/model/taskLabel.model';
+import { TaskMemberModel } from '../../src/model/taskMember.model';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -45,6 +46,7 @@ describe('Task Label Management API', function () {
     it('should add a task member if not already added', async () => {
       sinon.stub(TaskModel, 'findOne').withArgs({ _id: taskId }).resolves(mockTask);
       sinon.stub(TaskLabelModel, 'findOne').withArgs({ task_id: taskId, label_id: labelId }).resolves(null);
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
       sinon.stub(TaskLabelModel, 'create').resolves(newLabel);
       const emitStub = sinon.stub();
       sinon.stub(getSocket(), 'io').value({ to: () => ({ emit: emitStub }) });
@@ -63,6 +65,7 @@ describe('Task Label Management API', function () {
       sinon.stub(TaskModel, 'findOne').resolves({ _id: taskId } as any);
 
       sinon.stub(TaskLabelModel, 'findOne').resolves(newLabel as any);
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       server
         .post(`${API_URL}/tasklabel/add`)
@@ -170,6 +173,7 @@ describe('Task Label Management API', function () {
       const taskLabelId = 'tm1';
 
       sinon.stub(TaskLabelModel, 'findOne').withArgs({ _id: taskLabelId }).resolves({ _id: taskLabelId });
+      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       const sessionStub: any = {
         startTransaction: sinon.stub(),
