@@ -47,7 +47,7 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
         sender: convertObjectId(user._id.toString()),
       });
 
-      emitToUser(io, memberDetails._id.toString(), 'task-member-joined', { data: newTaskMember });
+      emitToUser(io, memberDetails._id.toString(), 'receive_new_task-member', { data: newTaskMember });
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
     }
 

@@ -10,6 +10,9 @@ import { getSocket, users } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { emitToUser } from '../utils/socket';
+import { TaskMemberModel } from '../model/taskMember.model';
+import { NotificationModel } from '../model/notification.model';
+import { convertObjectId } from '../config/app.config';
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -37,7 +40,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
 
     const { io } = getSocket();
     if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'recieve-new-task', { data: newTask });
+      emitToUser(io, user._id.toString(), 'receive-new-task', { data: newTask });
     }
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
@@ -231,7 +234,7 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
     const { io } = getSocket();
 
     if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'recieve-updated-task', { data: !updated ? movingTask : updatedtData1 });
+      emitToUser(io, user._id.toString(), 'receive-updated-task', { data: !updated ? movingTask : updatedtData1 });
     }
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
@@ -285,6 +288,7 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
+    const taskMembers = await TaskMemberModel.find({ task_id: task_id });
 
     const uploadResponse = await saveMultipleFilesToCloud(attachments, 'tasks');
 
@@ -310,9 +314,17 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
     );
 
     const { io } = getSocket();
-
-    if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'upload-attachment-task', { data: updateAttachment });
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `New attachment has been uploaded by "${user.first_name} ${user.last_name}"`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'upload-attachment-task', { data: updateAttachment });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
     }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
@@ -329,12 +341,14 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
 export const deleteAttachmentHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { taskId, imageId } = req.query;
-
+    // @ts-expect-error
+    const user = req?.user;
     const taskExist = await TaskModel.findOne({ _id: taskId });
     if (!taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
+    const taskMembers = await TaskMemberModel.find({ task_id: taskId });
 
     const attachmentData: any = taskExist.attachment.find((item: any) => item._id == imageId);
     if (!attachmentData?.imageId) {
@@ -347,6 +361,19 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
     const updateAttachment = await TaskModel.findByIdAndUpdate(taskId, {
       attachment: removeImage,
     });
+
+    const { io } = getSocket();
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `Attachment has been removed by "${user.first_name} ${user.last_name}"`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
+    }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted');
     return;

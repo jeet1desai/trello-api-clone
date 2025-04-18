@@ -5,13 +5,15 @@ import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { addTaskLabelSchema } from '../schemas/task.schema';
 import { getSocket, users } from '../config/socketio.config';
-import { TaskLabelModel } from '../model/taskLabel.model';
 import { commentSchema, updateCommentSchema } from '../schemas/comment.schema';
 import { CommentModel } from '../model/comment.model';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
+import { TaskMemberModel } from '../model/taskMember.model';
+import { NotificationModel } from '../model/notification.model';
+import { convertObjectId } from '../config/app.config';
+import { emitToUser } from '../utils/socket';
 
 export const addCommentHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -26,6 +28,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
+    const taskMembers = await TaskMemberModel.find({ task_id: task_id });
 
     let attachmentsData: any[] = [];
 
@@ -47,11 +50,17 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     });
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      io?.to(socketId).emit('receive_comment', { data: newComment });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `New commend has been added by "${user.first_name} ${user.last_name}"`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'receive_new_comment', { data: newComment });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
     }
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Comment successfully added', newComment);
@@ -90,13 +99,17 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
   session.startTransaction();
   try {
     const { id } = req.params;
-    const taskLabelExist = await CommentModel.findOne({ _id: id });
-    if (!taskLabelExist) {
+    // @ts-expect-error
+    const user = req?.user;
+    const commentExist = await CommentModel.findOne({ _id: id });
+    if (!commentExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Comment not found..!');
       return;
     }
-    if (taskLabelExist.attachment.length > 0) {
-      taskLabelExist.attachment.forEach(async (item) => {
+    const taskMembers = await TaskMemberModel.find({ task_id: commentExist.task_id });
+
+    if (commentExist.attachment.length > 0) {
+      commentExist.attachment.forEach(async (item) => {
         await deleteFromCloudinary(item.imageId);
       });
     }
@@ -104,6 +117,19 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
 
     await session.commitTransaction();
     session.endSession();
+
+    const { io } = getSocket();
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `Comment has been removed from task`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
+    }
     APIResponse(res, true, HttpStatusCode.OK, 'Comment successfully removed', taskLabel);
   } catch (err) {
     await session.abortTransaction();
@@ -143,6 +169,8 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Comment not found');
       return;
     }
+
+    const taskMembers = await TaskMemberModel.find({ task_id: existingComment.task_id });
 
     // chekc delete attachment has value or not
     if (deletedAttachments.length > 0) {
@@ -212,11 +240,18 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
       await Promise.all(deletedAttachments.map((imageId) => deleteFromCloudinary(imageId)));
     }
 
-    // Emit socket update
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId && io) {
-      io.to(socketId).emit('receive_updated_comment', { data: updatedComment });
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `New commend has been updated by "${user.first_name} ${user.last_name}"`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'receive_updated_comment', { data: updatedComment });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
     }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Comment successfully updated', updatedComment);

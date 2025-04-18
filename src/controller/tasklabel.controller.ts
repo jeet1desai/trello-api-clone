@@ -47,7 +47,7 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
           receiver: convertObjectId(member.member_id.toString()),
           sender: convertObjectId(user._id.toString()),
         });
-        emitToUser(io, member?.member_id.toString(), 'task-label-added', { data: newTaskLabel });
+        emitToUser(io, member?.member_id.toString(), 'receive-new-task-label', { data: newTaskLabel });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
