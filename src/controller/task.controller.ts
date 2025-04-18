@@ -24,6 +24,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     }
 
     const lastTask = await TaskModel.findOne({ status_list_id, board_id }).sort('-position').exec();
+
     const nextPosition = lastTask ? lastTask.position + 1 : 1;
 
     const newTask = await TaskModel.create({
@@ -175,12 +176,29 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
 
       await TaskModel.bulkWrite(oldOps);
 
-      // Get new position in the new list
-      const newListTasks = await TaskModel.find({ status_list_id }).sort('position');
-      const newPositionInNewList = newListTasks.length + 1;
+      const newListTasks = await TaskModel.find({
+        status_list_id,
+        _id: { $ne: taskId },
+      }).sort('position');
+
+      const shiftedTasks: any = newListTasks
+        .map((task) => {
+          if (task.position >= newPosition) {
+            return {
+              updateOne: {
+                filter: { _id: task._id },
+                update: { $inc: { position: 1 } },
+              },
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      await TaskModel.bulkWrite(shiftedTasks);
 
       movingTask.status_list_id = status_list_id;
-      movingTask.position = newPositionInNewList;
+      movingTask.position = newPosition;
       updated = true;
     }
 
