@@ -8,6 +8,10 @@ import { TaskModel } from '../model/task.model';
 import { addTaskLabelSchema } from '../schemas/task.schema';
 import { getSocket, users } from '../config/socketio.config';
 import { TaskLabelModel } from '../model/taskLabel.model';
+import { TaskMemberModel } from '../model/taskMember.model';
+import { emitToUser } from '../utils/socket';
+import { convertObjectId } from '../config/app.config';
+import { NotificationModel } from '../model/notification.model';
 
 export const addTaskLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -21,6 +25,7 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
+    const taskMembers = await TaskMemberModel.find({ task_id: task_id });
 
     const taskLabelExist = await TaskLabelModel.findOne({ task_id, label_id });
     if (taskLabelExist) {
@@ -34,11 +39,17 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
     });
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      io?.to(socketId).emit('recieve-tasklabel', { data: newTaskLabel });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `New label added in task`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'task-label-added', { data: newTaskLabel });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
     }
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', newTaskLabel);
@@ -77,14 +88,33 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
   session.startTransaction();
   try {
     const { id } = req.params;
-    const taskLabelExist = await TaskLabelModel.findOne({ _id: id });
+    // @ts-expect-error
+    const user = req?.user;
+    const taskLabelExist: any = await TaskLabelModel.findOne({ _id: id });
+
     if (!taskLabelExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task label not found..!');
       return;
     }
+    const taskMembers = await TaskMemberModel.find({ task_id: taskLabelExist.task_id });
+
     const taskLabel = await TaskLabelModel.findByIdAndDelete({ _id: id }, { session });
     await session.commitTransaction();
     session.endSession();
+
+    const { io } = getSocket();
+    if (taskMembers.length > 0) {
+      taskMembers.forEach(async (member: any) => {
+        const notification = await NotificationModel.create({
+          message: `Label removed from task`,
+          action: 'invited',
+          receiver: convertObjectId(member.member_id.toString()),
+          sender: convertObjectId(user._id.toString()),
+        });
+        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
+      });
+    }
+
     APIResponse(res, true, HttpStatusCode.OK, 'Task label successfully removed', taskLabel);
   } catch (err) {
     await session.abortTransaction();

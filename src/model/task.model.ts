@@ -53,13 +53,16 @@ const schema = new mongoose.Schema<TaskModelType>(
     },
     start_date: {
       type: Date,
+      default: null,
     },
     end_date: {
       type: Date,
+      default: null,
     },
     priority: {
       type: String,
       enum: Object.values(Priority),
+      default: 'Medium',
     },
     position: {
       type: Number,

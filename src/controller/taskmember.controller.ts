@@ -8,6 +8,10 @@ import { TaskModel } from '../model/task.model';
 import { addTaskMemberSchema, createTaskSchema } from '../schemas/task.schema';
 import { getSocket, users } from '../config/socketio.config';
 import { TaskMemberModel } from '../model/taskMember.model';
+import { emitToUser } from '../utils/socket';
+import User from '../model/user.model';
+import { convertObjectId } from '../config/app.config';
+import { NotificationModel } from '../model/notification.model';
 
 export const addTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -16,6 +20,7 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
     const user = req?.user;
     const { task_id, member_id } = req.body;
     const taskExist = await TaskModel.findOne({ _id: task_id });
+    const memberDetails = await User.findOne({ _id: member_id });
 
     if (!taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
@@ -34,11 +39,16 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
     });
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      io?.to(socketId).emit('task-member-joined', { data: newTaskMember });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+    if (memberDetails._id.toString()) {
+      const notification = await NotificationModel.create({
+        message: `Welcome, You added as a member in this task`,
+        action: 'invited',
+        receiver: convertObjectId(memberDetails._id.toString()),
+        sender: convertObjectId(user._id.toString()),
+      });
+
+      emitToUser(io, memberDetails._id.toString(), 'task-member-joined', { data: newTaskMember });
+      emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
     }
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', newTaskMember);
@@ -78,12 +88,28 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
   session.startTransaction();
   try {
     const { id } = req.params;
-    const taskMemberExist = await TaskMemberModel.findOne({ _id: id });
+    // @ts-expect-error
+    const user = req?.user;
+
+    const taskMemberExist: any = await TaskMemberModel.findOne({ _id: id });
     if (!taskMemberExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task member not found..!');
       return;
     }
     const taksMember = await TaskMemberModel.findByIdAndDelete({ _id: id }, { session });
+
+    const { io } = getSocket();
+    if (taskMemberExist?.member_id.toString()) {
+      const notification = await NotificationModel.create({
+        message: `You removed as a member from this task`,
+        action: 'invited',
+        receiver: convertObjectId(taskMemberExist?.member_id.toString()),
+        sender: convertObjectId(user._id.toString()),
+      });
+
+      emitToUser(io, taskMemberExist?.member_id.toString(), 'receive_notification', { data: notification });
+      emitToUser(io, taskMemberExist?.member_id.toString(), 'task-member-removed', { data: taskMemberExist });
+    }
     await session.commitTransaction();
     session.endSession();
     APIResponse(res, true, HttpStatusCode.OK, 'Task member successfully removed', taksMember);

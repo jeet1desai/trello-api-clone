@@ -9,6 +9,7 @@ import { attachmentSchema, createTaskSchema } from '../schemas/task.schema';
 import { getSocket, users } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
+import { emitToUser } from '../utils/socket';
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -17,7 +18,6 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     const user = req?.user;
     const { title, status_list_id, board_id } = req.body;
     const taskExist = await TaskModel.findOne({ title, status_list_id, board_id });
-
     if (taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task already exists..!');
       return;
@@ -35,11 +35,8 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     });
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      io?.to(socketId).emit('recieve-new-task', { data: newTask });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+    if (user._id.toString()) {
+      emitToUser(io, user._id.toString(), 'recieve-new-task', { data: newTask });
     }
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
@@ -57,7 +54,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const { statusId } = req.query;
     const tasks = await TaskModel.find({ status_list_id: statusId })
       .sort({ position: 1 })
-      .select('_id title description attachment board_id status_list_id created_by position status')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -82,7 +79,7 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
   try {
     const { id } = req.params;
     const tasks = await TaskModel.findById({ _id: id })
-      .select('_id title description attachment board_id status_list_id created_by position status')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -109,7 +106,7 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
 
 export const updateTaskHandler: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { taskId, newPosition, title, description, status_list_id, status } = req.body;
+    const { taskId, newPosition, title, description, status_list_id, status, start_date, end_date, priority } = req.body;
     // @ts-expect-error
     const user = req?.user;
 
@@ -141,6 +138,21 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
 
     if (status !== undefined) {
       movingTask.status = status;
+      updated = true;
+    }
+
+    if (start_date) {
+      movingTask.start_date = start_date;
+      updated = true;
+    }
+
+    if (end_date) {
+      movingTask.end_date = end_date;
+      updated = true;
+    }
+
+    if (priority) {
+      movingTask.priority = priority;
       updated = true;
     }
 
@@ -199,11 +211,9 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
     }
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      io?.to(socketId).emit('recieve-updated-task', { data: !updated ? movingTask : updatedtData1 });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+
+    if (user._id.toString()) {
+      emitToUser(io, user._id.toString(), 'recieve-updated-task', { data: !updated ? movingTask : updatedtData1 });
     }
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
@@ -241,6 +251,8 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
 export const uploadAttachmentHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { task_id } = req.body;
+    // @ts-expect-error
+    const user = req?.user;
     await validateRequest(req.body, attachmentSchema);
 
     const attachments = req.files as Express.Multer.File[];
@@ -278,6 +290,12 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
         runValidators: true,
       }
     );
+
+    const { io } = getSocket();
+
+    if (user._id.toString()) {
+      emitToUser(io, user._id.toString(), 'upload-attachment-task', { data: updateAttachment });
+    }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
     return;

@@ -42,17 +42,20 @@ export default async (req: express.Request, res: express.Response, next: express
   try {
     if (!accessToken) {
       APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'No auth token provided', null);
+      return;
     }
 
     const decoded: any = jwtVerify(accessToken);
     if (!decoded) {
       APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Invalid access token', null);
+      return;
     }
 
     const { _id } = decoded;
     const user = await User.findById(_id);
     if (!user) {
       APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+      return;
     }
 
     // @ts-expect-error
@@ -69,6 +72,7 @@ export default async (req: express.Request, res: express.Response, next: express
         const user = await User.findById(_id);
         if (!user) {
           APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+          return;
         }
         res.cookie('access_token', newAccessToken, COOKIE_OPTIONS);
 
@@ -77,8 +81,10 @@ export default async (req: express.Request, res: express.Response, next: express
         return next();
       } else if (err.message.includes('Token used too late')) {
         APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+        return;
       } else if (err.message.includes('jwt expired')) {
         APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'jwt expired', null);
+        return;
       } else {
         console.error(err);
         next(err);
@@ -87,8 +93,10 @@ export default async (req: express.Request, res: express.Response, next: express
       try {
         if (err.message.includes('Token used too late')) {
           APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+          return;
         } else if (err.message.includes('jwt expired')) {
           APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
+          return;
         } else {
           console.error(err);
           next(err);
