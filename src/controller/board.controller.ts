@@ -13,7 +13,7 @@ import User from '../model/user.model';
 import { BoardInviteModel } from '../model/boardInvite.model';
 import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { NotificationModel } from '../model/notification.model';
 import { emitToUser } from '../utils/socket';
 

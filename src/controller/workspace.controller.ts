@@ -7,20 +7,23 @@ import { validateRequest } from '../utils/validation.utils';
 import { createWorkspaceSchema } from '../schemas/workspace.schema';
 import { MEMBER_ROLES } from '../config/app.config';
 import { MemberModel } from '../model/members.model';
+import { decrypt, encrypt } from '../helper/encryptionUtils';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    await validateRequest(req.body, createWorkspaceSchema);
+    const encrypted = req.body.data;
+    const decrypted = JSON.parse(decrypt(encrypted));
 
-    const { name, description } = req.body;
+    await validateRequest(decrypted, createWorkspaceSchema);
+
+    const { name, description } = decrypted;
     // @ts-expect-error
     const user = req?.user;
-    const data = await WorkSpaceModel.create({
-      name,
-      description,
-      createdBy: user?._id,
-    });
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Workspace successfully created', data);
+
+    const data = await WorkSpaceModel.create({ name, description, createdBy: user?._id });
+
+    const encryptedData = encrypt(data);
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Workspace successfully created', encryptedData);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
