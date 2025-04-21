@@ -49,6 +49,16 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       commented_by: user._id,
     });
 
+    const comments = await CommentModel.findOne({ _id: newComment._id })
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'commented_by',
+        select: '_id first_name middle_name last_name email profile_image status',
+      });
+
     const { io } = getSocket();
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
@@ -63,7 +73,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       });
     }
 
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Comment successfully added', newComment);
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Comment successfully added', comments);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
@@ -233,7 +243,16 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
       );
     }
 
-    const updatedComment = await CommentModel.findById(id).lean();
+    const updatedComment = await CommentModel.findById(id)
+      .lean()
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'commented_by',
+        select: '_id first_name middle_name last_name email profile_image status',
+      });
 
     // delete attachment from cloudinary
     if (deletedAttachments.length > 0) {
