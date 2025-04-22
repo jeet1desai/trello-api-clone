@@ -38,6 +38,16 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       member_id,
     });
 
+    const taskMembers = await TaskMemberModel.findOne({ _id: newTaskMember._id })
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'member_id',
+        select: '_id first_name  middle_name last_name email profile_image',
+      });
+
     const { io } = getSocket();
     if (memberDetails._id.toString()) {
       const notification = await NotificationModel.create({
@@ -47,11 +57,11 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
         sender: convertObjectId(user._id.toString()),
       });
 
-      emitToUser(io, memberDetails._id.toString(), 'receive_new_task-member', { data: newTaskMember });
+      emitToUser(io, memberDetails._id.toString(), 'receive_new_task-member', { data: taskMembers });
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
     }
 
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', newTaskMember);
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', taskMembers);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
