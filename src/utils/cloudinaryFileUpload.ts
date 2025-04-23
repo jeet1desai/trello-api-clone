@@ -75,9 +75,11 @@ export const saveFileToCloud = async (file: Express.Multer.File, folder: string)
   }
 };
 
-export const deleteFromCloudinary = async (publicId: string): Promise<void> => {
+export const deleteFromCloudinary = async (publicId: string, resourceType?: string): Promise<void> => {
   try {
-    const result = await cloudinary.uploader.destroy(publicId);
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
     if (result.result !== 'ok') {
       throw new Error(`Failed to delete asset: ${publicId}`);
     }

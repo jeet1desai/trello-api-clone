@@ -13,6 +13,7 @@ import { emitToUser } from '../utils/socket';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { NotificationModel } from '../model/notification.model';
 import { convertObjectId } from '../config/app.config';
+import { getResourceType } from '../helper/getResourceType';
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -355,7 +356,8 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Image not found..!');
       return;
     }
-    const result = await deleteFromCloudinary(attachmentData.imageId);
+    const resourfceType = await getResourceType(attachmentData.imageName);
+    const result = await deleteFromCloudinary(attachmentData.imageId, resourfceType);
     const removeImage = taskExist.attachment.filter((item: any) => item._id != imageId);
 
     const updateAttachment = await TaskModel.findByIdAndUpdate(taskId, {
