@@ -97,16 +97,16 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { id } = req.params;
+    const { taskId, memberId } = req.query;
     // @ts-expect-error
     const user = req?.user;
 
-    const taskMemberExist: any = await TaskMemberModel.findOne({ _id: id });
+    const taskMemberExist: any = await TaskMemberModel.findOne({ task_id: taskId, member_id: memberId });
     if (!taskMemberExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task member not found..!');
       return;
     }
-    const taksMember = await TaskMemberModel.findByIdAndDelete({ _id: id }, { session });
+    const taksMember = await TaskMemberModel.findOneAndDelete({ task_id: taskId, member_id: memberId }, { session });
 
     const { io } = getSocket();
     if (taskMemberExist?.member_id.toString()) {
