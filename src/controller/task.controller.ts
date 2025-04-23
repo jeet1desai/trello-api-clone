@@ -14,6 +14,8 @@ import { TaskMemberModel } from '../model/taskMember.model';
 import { NotificationModel } from '../model/notification.model';
 import { convertObjectId } from '../config/app.config';
 import { getResourceType } from '../helper/getResourceType';
+import { TaskLabelModel } from '../model/taskLabel.model';
+import { CommentModel } from '../model/comment.model';
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -72,7 +74,24 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
         ],
       });
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully fetched', tasks);
+    const taskList = await Promise.all(
+      tasks.map(async (task) => {
+        const taskLabels = await TaskLabelModel.find({ task_id: task._id }).populate({
+          path: 'label_id',
+          select: '_id name backgroundColor textColor boardId',
+        });
+
+        const taskComment = await CommentModel.countDocuments({ task_id: task._id });
+
+        return {
+          ...task.toObject(),
+          labels: taskLabels.map((tl) => tl.label_id),
+          comments: taskComment,
+        };
+      })
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully fetched', taskList);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);

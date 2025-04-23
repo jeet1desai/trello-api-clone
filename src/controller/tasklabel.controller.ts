@@ -38,6 +38,16 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       label_id,
     });
 
+    const taskLabel = await TaskLabelModel.findById(newTaskLabel._id)
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'label_id',
+        select: '_id name backgroundColor textColor boardId',
+      });
+
     const { io } = getSocket();
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
@@ -47,12 +57,12 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
           receiver: convertObjectId(member.member_id.toString()),
           sender: convertObjectId(user._id.toString()),
         });
-        emitToUser(io, member?.member_id.toString(), 'receive-new-task-label', { data: newTaskLabel });
+        emitToUser(io, member?.member_id.toString(), 'receive-new-task-label', { data: taskLabel });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
 
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', newTaskLabel);
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', taskLabel);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
@@ -87,18 +97,17 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { id } = req.params;
+    const { taskId, labelId } = req.query;
     // @ts-expect-error
     const user = req?.user;
-    const taskLabelExist: any = await TaskLabelModel.findOne({ _id: id });
-
+    const taskLabelExist: any = await TaskLabelModel.findOne({ task_id: taskId, label_id: labelId });
     if (!taskLabelExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task label not found..!');
       return;
     }
     const taskMembers = await TaskMemberModel.find({ task_id: taskLabelExist.task_id });
 
-    const taskLabel = await TaskLabelModel.findByIdAndDelete({ _id: id }, { session });
+    const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session });
     await session.commitTransaction();
     session.endSession();
 
