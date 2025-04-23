@@ -24,9 +24,31 @@ const mockTask = {
 };
 
 const newLabel: any = {
-  _id: 'newTaskLabelId',
+  _id: new mongoose.Types.ObjectId(),
   task_id: taskId,
   label_id: labelId,
+};
+
+const taskLabelMock = {
+  _id: new mongoose.Types.ObjectId(),
+  task_id: {
+    _id: new mongoose.Types.ObjectId(),
+    title: 'Signup updated 121',
+    description: 'hello',
+    board_id: new mongoose.Types.ObjectId(),
+    status_list_id: new mongoose.Types.ObjectId(),
+    position: 1,
+  },
+  label_id: {
+    _id: new mongoose.Types.ObjectId(),
+    name: 'QA',
+    backgroundColor: '#000000',
+    textColor: '#fff',
+    boardId: new mongoose.Types.ObjectId(),
+  },
+  createdAt: '2025-04-23T08:51:53.555Z',
+  updatedAt: '2025-04-23T08:51:53.555Z',
+  __v: 0,
 };
 
 describe('Task Label Management API', function () {
@@ -48,6 +70,10 @@ describe('Task Label Management API', function () {
       sinon.stub(TaskLabelModel, 'findOne').withArgs({ task_id: taskId, label_id: labelId }).resolves(null);
       sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
       sinon.stub(TaskLabelModel, 'create').resolves(newLabel);
+
+      const populateStub2 = sinon.stub().resolves(taskLabelMock);
+      const populateStub1 = sinon.stub().returns({ populate: populateStub2 });
+      sinon.stub(TaskLabelModel, 'findById').returns({ populate: populateStub1 } as any);
       const emitStub = sinon.stub();
       sinon.stub(getSocket(), 'io').value({ to: () => ({ emit: emitStub }) });
 
@@ -170,9 +196,10 @@ describe('Task Label Management API', function () {
 
   describe('DELETE /tasklabel/delete/:id', () => {
     it('should delete a task lable by ID', async () => {
-      const taskLabelId = 'tm1';
+      const labelId = 'tm1';
+      const taskId = 'tm1';
 
-      sinon.stub(TaskLabelModel, 'findOne').withArgs({ _id: taskLabelId }).resolves({ _id: taskLabelId });
+      sinon.stub(TaskLabelModel, 'findOne').withArgs({ label_id: labelId, task_id: taskId }).resolves({ _id: labelId });
       sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: 'member id' }]);
 
       const sessionStub: any = {
@@ -183,10 +210,13 @@ describe('Task Label Management API', function () {
       };
 
       sinon.stub(mongoose, 'startSession').resolves(sessionStub as any);
-      sinon.stub(TaskLabelModel, 'findByIdAndDelete').withArgs({ _id: taskLabelId }, { session: sessionStub }).resolves({ _id: taskLabelId });
+      sinon
+        .stub(TaskLabelModel, 'findOneAndDelete')
+        .withArgs({ _label_id: labelId, task_id: taskId }, { session: sessionStub })
+        .resolves({ _id: labelId });
 
       await server
-        .delete(`${API_URL}/tasklabel/delete/${taskLabelId}`)
+        .delete(`${API_URL}/tasklabel/delete?taskId=${taskId}&labelId=${labelId}`)
         .set('Cookie', ['access_token=fake-jwt-token'])
         .expect(200)
         .then((res) => {
@@ -202,7 +232,7 @@ describe('Task Label Management API', function () {
       } as any);
 
       server
-        .delete(`${API_URL}/tasklabel/delete/121`)
+        .delete(`${API_URL}/tasklabel/delete?taskId=${taskId}&labelId=${labelId}`)
         .set('Cookie', ['access_token=token'])
         .expect(400)
         .end((err, res) => {
@@ -225,7 +255,7 @@ describe('Task Label Management API', function () {
       const findOneStub = sinon.stub(TaskLabelModel, 'findOne').throws(new Error(errorMessage));
 
       server
-        .delete(`${API_URL}/tasklabel/delete/121`)
+        .delete(`${API_URL}/tasklabel/delete?taskId=${taskId}&labelId=${labelId}`)
         .set('Cookie', ['access_token=token'])
         .expect(502)
         .end((err, res) => {

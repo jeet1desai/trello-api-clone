@@ -55,7 +55,7 @@ const Signup: RequestHandler = async (request: Request, response: Response, next
       expiresIn: TOKEN_EXP.email_token as any,
     });
     userCreated.email_token = token;
-    userCreated.email_token_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    userCreated.email_token_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     await userCreated.save();
 
     const verifyUrl = `${process.env.FE_URL}/?token=${token}`;
