@@ -366,7 +366,7 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       }
     );
 
-    let visibleUserIds = [user._id.toString];
+    let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
     if (taskMembers.length > 0) {
@@ -428,7 +428,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       attachment: removeImage,
     });
 
-    let visibleUserIds = [user._id.toString];
+    let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
     if (taskMembers.length > 0) {

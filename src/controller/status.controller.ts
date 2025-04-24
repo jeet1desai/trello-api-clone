@@ -7,6 +7,9 @@ import { createStatusSchema } from '../schemas/status.schema';
 import { StatusModel } from '../model/status.model';
 import mongoose from 'mongoose';
 import { getSocket, users } from '../config/socketio.config';
+import { MemberModel } from '../model/members.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
+import { emitToUser } from '../utils/socket';
 
 export const createStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -33,12 +36,21 @@ export const createStatusHandler = async (req: Request, res: Response, next: Nex
     });
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      io?.to(socketId).emit('receive_status', { data: status });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
+    if (user._id.toString()) {
+      emitToUser(io, user._id.toString(), 'receive_status', { data: status });
     }
+
+    const members = await MemberModel.find({ boardId: board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Created',
+      'Status',
+      board_id,
+      visibleUserIds,
+      `Status "${name}" has been created by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Status successfully created', status);
   } catch (err) {
@@ -147,6 +159,18 @@ export const updateStatusHandler: RequestHandler = async (req: Request, res: Res
             ? 'Status positions reordered successfully'
             : 'Nothing to update';
 
+    const members = await MemberModel.find({ boardId: movingStatus.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Updated',
+      'Status',
+      movingStatus.board_id?.toString() || '',
+      visibleUserIds,
+      `Status has been updated by ${user.first_name}`
+    );
+
     APIResponse(res, true, 200, message);
   } catch (err) {
     APIResponse(res, false, 500, err instanceof Error ? err.message : 'Internal Server Error');
@@ -158,6 +182,8 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
   session.startTransaction();
   try {
     const { id } = req.params;
+    // @ts-expect-error
+    const user = req?.user;
     const statusExist = await StatusModel.findOne({ _id: id });
     if (!statusExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Status not found..!');
@@ -166,6 +192,17 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
     const status = await StatusModel.findByIdAndDelete({ _id: id }, { session });
     await session.commitTransaction();
     session.endSession();
+    const members = await MemberModel.find({ boardId: statusExist.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Updated',
+      'Status',
+      statusExist.board_id?.toString() || '',
+      visibleUserIds,
+      `Status has been deleted by ${user.first_name}`
+    );
     APIResponse(res, true, HttpStatusCode.OK, 'Status successfully deleted', status);
   } catch (err) {
     await session.abortTransaction();

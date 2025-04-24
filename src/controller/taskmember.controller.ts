@@ -12,6 +12,7 @@ import { emitToUser } from '../utils/socket';
 import User from '../model/user.model';
 import { convertObjectId } from '../config/app.config';
 import { NotificationModel } from '../model/notification.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const addTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -61,6 +62,19 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
     }
 
+    const members = await TaskMemberModel.find({ task_id: task_id }).select('member_id');
+    const visibleUserIds = members.map((m: any) => m.member_id.toString());
+    const memberName = (taskMembers?.member_id as any)?.first_name || '';
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Added',
+      'Task Member',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `"${memberName}" has been added in Task ${taskExist.title} by ${user.first_name}`
+    );
+
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', taskMembers);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
@@ -106,6 +120,8 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task member not found..!');
       return;
     }
+    const taskExist = await TaskModel.findOne({ _id: taskId });
+
     const taksMember = await TaskMemberModel.findOneAndDelete({ task_id: taskId, member_id: memberId }, { session });
 
     const { io } = getSocket();
@@ -122,6 +138,30 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
     }
     await session.commitTransaction();
     session.endSession();
+
+    const taskMembers = await TaskMemberModel.findOne({ _id: memberId })
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'member_id',
+        select: '_id first_name  middle_name last_name email profile_image',
+      });
+
+    const members = await TaskMemberModel.find({ task_id: taskId }).select('member_id');
+    const visibleUserIds = members.map((m: any) => m.member_id.toString());
+    const memberName = (taskMembers?.member_id as any)?.first_name || '';
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Deleted',
+      'Task Member',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `"${memberName}" has been added in Task ${taskExist?.title} by ${user.first_name}`
+    );
+
     APIResponse(res, true, HttpStatusCode.OK, 'Task member successfully removed', taksMember);
   } catch (err) {
     await session.abortTransaction();

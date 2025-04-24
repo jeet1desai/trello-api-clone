@@ -12,6 +12,7 @@ import { TaskMemberModel } from '../model/taskMember.model';
 import { emitToUser } from '../utils/socket';
 import { convertObjectId } from '../config/app.config';
 import { NotificationModel } from '../model/notification.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const addTaskLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -48,9 +49,12 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
         select: '_id name backgroundColor textColor boardId',
       });
 
+    let visibleUserIds = [user._id.toString()];
+
     const { io } = getSocket();
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `New label added in task`,
           action: 'invited',
@@ -61,6 +65,15 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Added',
+      'Task Label',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Label has been added in Task ${taskExist.title} by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', taskLabel);
   } catch (err) {
@@ -105,15 +118,19 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task label not found..!');
       return;
     }
+    const taskExist = await TaskModel.findOne({ _id: taskId });
     const taskMembers = await TaskMemberModel.find({ task_id: taskLabelExist.task_id });
 
     const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session });
     await session.commitTransaction();
     session.endSession();
 
+    let visibleUserIds = [user._id.toString];
+
     const { io } = getSocket();
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `Label removed from task`,
           action: 'invited',
@@ -123,6 +140,15 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Removed',
+      'Task Label',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Label has been delete in Task ${taskExist?.title} by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Task label successfully removed', taskLabel);
   } catch (err) {
