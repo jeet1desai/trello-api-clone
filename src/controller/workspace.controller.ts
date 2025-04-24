@@ -7,6 +7,7 @@ import { validateRequest } from '../utils/validation.utils';
 import { createWorkspaceSchema } from '../schemas/workspace.schema';
 import { MEMBER_ROLES } from '../config/app.config';
 import { MemberModel } from '../model/members.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -20,6 +21,7 @@ export const createWorkSpaceController = async (req: express.Request, res: expre
       description,
       createdBy: user?._id,
     });
+    await saveRecentActivity(user._id.toString(), 'Created', 'Workspace', '', [user?._id.toString()], `${user.first_name} created new workspace`);
     APIResponse(res, true, HttpStatusCode.CREATED, 'Workspace successfully created', data);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
@@ -34,13 +36,16 @@ export const updateWorkSpaceController = async (req: express.Request, res: expre
   try {
     const { id } = req.params;
     const { name, description } = req.body;
-
+    // @ts-expect-error
+    const user = req?.user;
     const workspace = await WorkSpaceModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
 
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
+
+    await saveRecentActivity(user._id.toString(), 'Updated', 'Workspace', '', [user?._id.toString()], `${user.first_name} updated workspace`);
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully updated', workspace);
   } catch (err) {
@@ -53,13 +58,16 @@ export const updateWorkSpaceController = async (req: express.Request, res: expre
 export const deleteWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const { id } = req.params;
-
+    // @ts-expect-error
+    const user = req?.user;
     const workspace = await WorkSpaceModel.findByIdAndDelete({ _id: id });
 
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
+
+    await saveRecentActivity(user._id.toString(), 'Deleted', 'Workspace', '', [user?._id.toString()], `${user.first_name} deleted workspace`);
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully deleted', workspace);
   } catch (err) {

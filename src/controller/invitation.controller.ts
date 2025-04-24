@@ -14,6 +14,7 @@ import { sendBoardInviteEmail } from './board.controller';
 import { NotificationModel } from '../model/notification.model';
 import { getSocket, users } from '../config/socketio.config';
 import { emitToUser } from '../utils/socket';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const getInvitationDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -75,7 +76,26 @@ export const updateInvitationDetailController = async (req: express.Request, res
           workspaceId: invitation.workspaceId,
           role: invitation.role || MEMBER_ROLES.MEMBER,
         });
+        await saveRecentActivity(
+          existingUser._id.toString(),
+          'Joined',
+          'Board',
+          invitation.boardId.toString(),
+          [user._id.toString(), invitation?.invitedBy],
+          `${existingUser.first_name} joined the board via invitation`
+        );
       }
+    }
+
+    if (status === MEMBER_INVITE_STATUS.REJECTED) {
+      await saveRecentActivity(
+        existingUser._id.toString(),
+        'Rejected',
+        'Board',
+        invitation.boardId.toString(),
+        [invitation?.invitedBy as unknown as string],
+        `${existingUser.first_name} rejected the invitation to join the board`
+      );
     }
 
     const notification = await NotificationModel.create({

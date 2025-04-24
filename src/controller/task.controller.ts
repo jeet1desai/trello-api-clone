@@ -16,6 +16,8 @@ import { convertObjectId } from '../config/app.config';
 import { getResourceType } from '../helper/getResourceType';
 import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
+import { MemberModel } from '../model/members.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -45,6 +47,11 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     if (user._id.toString()) {
       emitToUser(io, user._id.toString(), 'receive-new-task', { data: newTask });
     }
+
+    const members = await MemberModel.find({ boardId: board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(user._id.toString(), 'Created', 'Task', board_id, visibleUserIds, `Task "${title}" was created by ${user.first_name}`);
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
   } catch (err) {
@@ -259,6 +266,18 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
 
+    const members = await MemberModel.find({ boardId: movingTask.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Updated',
+      'Task',
+      movingTask?.board_id?.toString() || '',
+      visibleUserIds,
+      `Task was udpated by ${user.first_name}`
+    );
+
     APIResponse(res, true, 200, message, !updated ? movingTask : updatedtData1);
   } catch (err) {
     APIResponse(res, false, 500, err instanceof Error ? err.message : 'Internal Server Error');
@@ -270,14 +289,28 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
   session.startTransaction();
   try {
     const { id } = req.params;
-    const statusExist = await TaskModel.findOne({ _id: id });
-    if (!statusExist) {
+    // @ts-expect-error
+    const user = req?.user;
+    const taskExist = await TaskModel.findOne({ _id: id });
+    if (!taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
     const status = await TaskModel.findByIdAndDelete({ _id: id }, { session });
     await session.commitTransaction();
     session.endSession();
+
+    const members = await MemberModel.find({ boardId: taskExist.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Deleted',
+      'Task',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Task was deleted by ${user.first_name}`
+    );
     APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', status);
   } catch (err) {
     await session.abortTransaction();
@@ -333,9 +366,12 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       }
     );
 
+    let visibleUserIds = [user._id.toString];
+
     const { io } = getSocket();
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `New attachment has been uploaded by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
@@ -346,6 +382,15 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Uploaded',
+      'Attachment',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Attachment has been uploaded by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
     return;
@@ -383,9 +428,12 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       attachment: removeImage,
     });
 
+    let visibleUserIds = [user._id.toString];
+
     const { io } = getSocket();
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `Attachment has been removed by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
@@ -395,6 +443,15 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Deleted',
+      'Attachment',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Attachment has been deleted by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted');
     return;

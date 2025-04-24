@@ -16,6 +16,7 @@ import ejs from 'ejs';
 import { getSocket, users } from '../config/socketio.config';
 import { NotificationModel } from '../model/notification.model';
 import { emitToUser } from '../utils/socket';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -63,6 +64,8 @@ export const createBoardController = async (req: express.Request, res: express.R
       { session }
     );
 
+    let visibleUserIds = [user._id.toString()];
+
     if (members && members.length > 0) {
       for (const email of members) {
         if (email === user.email) continue;
@@ -84,6 +87,7 @@ export const createBoardController = async (req: express.Request, res: express.R
         );
 
         if (existingUser) {
+          visibleUserIds.push(existingUser._id.toString());
           const notification = await NotificationModel.create({
             message: `You have been invited to board "${name}"`,
             action: 'invited',
@@ -97,6 +101,15 @@ export const createBoardController = async (req: express.Request, res: express.R
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: invite._id.toString() });
       }
     }
+
+    await saveRecentActivity(
+      user?._id,
+      'Created',
+      'Board',
+      board?._id.toString(),
+      visibleUserIds,
+      `Board "${board.name}" was created by ${user.first_name}`
+    );
 
     await session.commitTransaction();
     session.endSession();
@@ -136,12 +149,18 @@ export const updateBoardController = async (req: express.Request, res: express.R
       return;
     }
 
+    const boardMembers = await MemberModel.find({ boardId: board._id }).select('memberId');
+    let visibleUserIds = new Set([user._id.toString()]);
+
+    for (const member of boardMembers as any) {
+      visibleUserIds.add(member?.memberId.toString());
+    }
+
     if (members && members.length > 0) {
       for (const email of members) {
         if (email === user.email) continue;
 
         const existingUser = await User.findOne({ email });
-
         const isAlreadyMember = existingUser
           ? await MemberModel.exists({
               memberId: convertObjectId(existingUser._id.toString()),
@@ -208,6 +227,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
         });
 
         if (existingUser) {
+          visibleUserIds.add(existingUser._id.toString());
           const notification = await NotificationModel.create({
             message: `You have been invited to board "${name}"`,
             action: 'invited',
@@ -221,6 +241,15 @@ export const updateBoardController = async (req: express.Request, res: express.R
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: newInvite._id.toString() });
       }
     }
+
+    await saveRecentActivity(
+      user?._id,
+      'Updated',
+      'Board',
+      board?._id.toString(),
+      Array.from(visibleUserIds),
+      `Board "${board.name}" was updated by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Board successfully updated', board);
   } catch (err) {
@@ -264,9 +293,11 @@ export const deleteBoardController = async (req: express.Request, res: express.R
     await BoardModel.deleteOne({ _id: id }, { session });
     await MemberModel.deleteMany({ boardId: id }, { session });
     await BoardInviteModel.deleteMany({ boardId: id }, { session });
+    let visibleUserIds = [user._id.toString()];
 
     for (const member of membersToNotify) {
       const userToNotify = member.memberId;
+      visibleUserIds.push(userToNotify?.toString());
       const [notification] = await NotificationModel.create(
         [
           {
@@ -281,6 +312,14 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       emitToUser(io, userToNotify?.toString(), 'receive_notification', { data: notification });
     }
 
+    await saveRecentActivity(
+      user?._id,
+      'Deleted',
+      'Board',
+      board?._id.toString(),
+      visibleUserIds,
+      `Board "${board.name}" was deleted by ${user.first_name}`
+    );
     await session.commitTransaction();
     session.endSession();
 
