@@ -7,6 +7,7 @@ import User from '../../src/model/user.model';
 import { MemberModel } from '../../src/model/members.model';
 import { MEMBER_ROLES } from '../../src/config/app.config';
 import mongoose from 'mongoose';
+import * as recentActivityService from '../../src/helper/recentActivityService'; // update path accordingly
 
 describe('Workspace API', () => {
   beforeEach(() => {
@@ -29,6 +30,8 @@ describe('Workspace API', () => {
         updatedAt: new Date(),
         __v: 0,
       } as any);
+
+      sinon.stub(recentActivityService, 'saveRecentActivity').resolves({} as any);
 
       server
         .post(`${API_URL}/workspace/create-workspace`)
@@ -83,7 +86,7 @@ describe('Workspace API', () => {
   });
 
   describe('PUT /update-workspace/:id', async () => {
-    it('should create a workspace successfully', (done) => {
+    it('should updated a workspace successfully', (done) => {
       sinon.stub(WorkSpaceModel, 'findByIdAndUpdate').resolves({
         name: 'Test Workspace Updated',
         description: 'Test workspace description Updated',
@@ -93,6 +96,8 @@ describe('Workspace API', () => {
         updatedAt: new Date(),
         __v: 0,
       } as any);
+
+      sinon.stub(recentActivityService, 'saveRecentActivity').resolves({} as any);
 
       server
         .put(`${API_URL}/workspace/update-workspace/67f4e6d9688da016b404959f`)
@@ -153,6 +158,7 @@ describe('Workspace API', () => {
         name: 'Test Workspace',
         createdBy: 'user123',
       } as any);
+      sinon.stub(recentActivityService, 'saveRecentActivity').resolves({} as any);
 
       server
         .delete(`${API_URL}/workspace/delete-workspace/workspace123`)

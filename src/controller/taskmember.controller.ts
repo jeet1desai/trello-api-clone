@@ -150,9 +150,9 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       });
 
     const members = await TaskMemberModel.find({ task_id: taskId }).select('member_id');
-    const visibleUserIds = members.map((m: any) => m.member_id.toString());
+    let visibleUserIds = members.map((m: any) => m.member_id.toString());
     const memberName = (taskMembers?.member_id as any)?.first_name || '';
-
+    visibleUserIds.push(memberId?.toString());
     await saveRecentActivity(
       user._id.toString(),
       'Deleted',
