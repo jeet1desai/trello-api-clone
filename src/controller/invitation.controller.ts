@@ -102,7 +102,7 @@ export const updateInvitationDetailController = async (req: express.Request, res
       message: `${user.first_name} ${user.last_name} have ${status === MEMBER_INVITE_STATUS.COMPLETED ? 'accepted' : 'rejected'} the invitation to join the board`,
       action: 'invitation',
       receiver: invitation.invitedBy,
-      sender: user._id,
+      sender: user,
     });
 
     emitToUser(io, invitation.invitedBy?.toString(), 'receive_notification', { data: notification });

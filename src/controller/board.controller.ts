@@ -92,7 +92,7 @@ export const createBoardController = async (req: express.Request, res: express.R
             message: `You have been invited to board "${name}"`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -192,7 +192,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             message: `You have been invited to board "${name}" again`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -207,7 +207,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             message: `You have been invited to board "${name}"`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -232,7 +232,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             message: `You have been invited to board "${name}"`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -304,7 +304,7 @@ export const deleteBoardController = async (req: express.Request, res: express.R
             message: `Board "${board.name}" is deleted by admin and you have been removed from board`,
             action: 'removed',
             receiver: userToNotify,
-            sender: user._id,
+            sender: user,
           },
         ],
         { session }

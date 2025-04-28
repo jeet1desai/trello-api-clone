@@ -94,7 +94,7 @@ export const removeMemberController = async (req: express.Request, res: express.
           message: `You have been removed from board "${board.name}"`,
           action: 'removed',
           receiver: uid,
-          sender: user._id,
+          sender: user,
         },
       ],
       { session }

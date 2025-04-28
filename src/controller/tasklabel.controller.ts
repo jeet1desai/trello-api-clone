@@ -59,7 +59,7 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
           message: `New label added in task`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive-new-task-label', { data: taskLabel });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
@@ -135,7 +135,7 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
           message: `Label removed from task`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });

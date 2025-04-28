@@ -55,7 +55,7 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
         message: `Welcome, You added as a member in this task`,
         action: 'invited',
         receiver: convertObjectId(memberDetails._id.toString()),
-        sender: convertObjectId(user._id.toString()),
+        sender: user,
       });
 
       emitToUser(io, memberDetails._id.toString(), 'receive_new_task-member', { data: taskMembers });
@@ -141,7 +141,7 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
         message: `You removed as a member from this task`,
         action: 'invited',
         receiver: convertObjectId(taskMemberExist?.member_id.toString()),
-        sender: convertObjectId(user._id.toString()),
+        sender: user,
       });
 
       emitToUser(io, taskMemberExist?.member_id.toString(), 'receive_notification', { data: notification });

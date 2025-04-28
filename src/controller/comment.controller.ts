@@ -66,7 +66,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
           message: `New commend has been added by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_new_comment', { data: newComment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
@@ -135,7 +135,7 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
           message: `Comment has been removed from task`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -266,7 +266,7 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
           message: `New commend has been updated by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_updated_comment', { data: updatedComment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });

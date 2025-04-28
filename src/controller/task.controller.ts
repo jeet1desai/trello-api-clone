@@ -376,7 +376,7 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
           message: `New attachment has been uploaded by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'upload-attachment-task', { data: updateAttachment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
@@ -438,7 +438,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
           message: `Attachment has been removed by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
