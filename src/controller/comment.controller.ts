@@ -46,7 +46,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       comment,
       task_id,
       attachment: attachmentsData,
-      commented_by: user._id,
+      commented_by: user,
     });
 
     const comments = await CommentModel.findOne({ _id: newComment._id })

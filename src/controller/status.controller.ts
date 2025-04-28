@@ -140,12 +140,19 @@ export const updateStatusHandler: RequestHandler = async (req: Request, res: Res
       }));
 
       await StatusModel.bulkWrite(bulkOps);
+      updated = true;
+    }
+
+    let updatedData;
+    if (updated) {
+      await movingStatus.save({ validateModifiedOnly: true });
+      updatedData = await StatusModel.findById(movingStatus._id);
     }
 
     const { io } = getSocket();
     const socketId = users.get(user._id.toString());
     if (socketId) {
-      io?.to(socketId).emit('receive_updated_status', { data: movingStatus });
+      emitToUser(io, user._id.toString(), 'receive_updated_status', { data: !updated ? movingStatus : updatedData });
     } else {
       console.warn(`No socket connection found for user: ${user._id.toString()}`);
     }
