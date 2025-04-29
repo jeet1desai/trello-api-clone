@@ -7,6 +7,19 @@ export interface CustomError {
   errors?: any[];
 }
 
+export class ValidationError extends Error {
+  statusCode: number;
+  errors: Record<string, string>;
+
+  constructor(errors: Record<string, string>) {
+    super('Validation Failed');
+    this.name = 'ValidationError';
+    this.statusCode = 400;
+    this.errors = errors;
+    Object.setPrototypeOf(this, ValidationError.prototype);
+  }
+}
+
 export const duplicateError = (message: string): CustomError => ({
   message,
   status: 'error',
