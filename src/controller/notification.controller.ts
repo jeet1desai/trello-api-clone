@@ -40,3 +40,21 @@ export const markNotificationAsReadController = async (req: express.Request, res
     }
   }
 };
+
+export const markAllNotificationsAsReadController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    // @ts-expect-error
+    const user = req.user;
+
+    const result = await NotificationModel.updateMany(
+      { receiver: user._id, read: false },
+      { $set: { read: true } }
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'All notifications marked as read', result);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
