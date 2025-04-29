@@ -125,7 +125,7 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
     await session.commitTransaction();
     session.endSession();
 
-    let visibleUserIds = [user._id.toString];
+    let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
     if (taskMembers.length > 0) {

@@ -421,12 +421,10 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       return;
     }
     const resourfceType = await getResourceType(attachmentData.imageName);
-    const result = await deleteFromCloudinary(attachmentData.imageId, resourfceType);
-    const removeImage = taskExist.attachment.filter((item: any) => item._id != imageId);
+    await deleteFromCloudinary(attachmentData.imageId, resourfceType);
 
-    const updateAttachment = await TaskModel.findByIdAndUpdate(taskId, {
-      attachment: removeImage,
-    });
+    taskExist.attachment = taskExist.attachment.filter((att: any) => att._id.toString() !== imageId);
+    const updateAttachment = await taskExist.save();
 
     let visibleUserIds = [user._id.toString()];
 
@@ -453,7 +451,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       `Attachment has been deleted by ${user.first_name}`
     );
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted');
+    APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted', updateAttachment);
     return;
   } catch (err) {
     if (err instanceof mongoose.Error.CastError) {
