@@ -238,8 +238,7 @@ const ForgotPassword: RequestHandler = async (request: Request, response: Respon
       return;
     }
 
-    let otp = Math.random();
-    otp = Math.floor(100000 + Math.random() * 900000);
+    const otp = Math.floor(100000 + Math.random() * 900000);
     const templatePath = __dirname + '/../helper/email-templates/sendOTP.ejs';
     const html = await ejs.renderFile(templatePath, { otp });
 
