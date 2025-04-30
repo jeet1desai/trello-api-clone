@@ -8,6 +8,8 @@ import { createWorkspaceSchema } from '../schemas/workspace.schema';
 import { MEMBER_ROLES } from '../config/app.config';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
+import { BoardModel } from '../model/board.model';
+import { getWorkspaceBoardsQuery } from './board.controller';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -60,8 +62,20 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
     const { id } = req.params;
     // @ts-expect-error
     const user = req?.user;
-    const workspace = await WorkSpaceModel.findByIdAndDelete({ _id: id });
-
+    const boards = await BoardModel.aggregate([...getWorkspaceBoardsQuery(id, user._id.toString()), { $count: 'total' }]);
+    let workspace = null;
+    if (boards[0]?.total > 0) {
+      APIResponse(
+        res,
+        false,
+        HttpStatusCode.UNPROCESSABLE_ENTITY,
+        'This workspace cannot be deleted until all related boards are removed.',
+        req.body
+      );
+      return;
+    } else {
+      workspace = await WorkSpaceModel.findByIdAndDelete({ _id: id });
+    }
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;

@@ -442,7 +442,7 @@ export const getWorkspaceBoardsController = async (req: express.Request, res: ex
   }
 };
 
-const getWorkspaceBoardsQuery = (workspaceId: string, userId: string): PipelineStage[] => {
+export const getWorkspaceBoardsQuery = (workspaceId: string, userId: string): PipelineStage[] => {
   return [
     { $match: { $expr: { $eq: ['$workspaceId', convertObjectId(workspaceId)] } } },
     {
