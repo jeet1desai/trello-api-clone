@@ -523,7 +523,7 @@ export const sendBoardInviteEmail = async ({
     inviterName: `${user.first_name} ${user.last_name}`,
     boardName: board.name,
     workspaceName: workspace.name,
-    link: `${process.env.BOARD_FE_URL}/invitation/${inviteId}`,
+    link: `${process.env.BOARD_FE_URL}/invitation/${inviteId}/${existingUser._id}`,
     registerLink: `${process.env.BOARD_FE_URL}/register`,
   });
 
@@ -598,6 +598,6 @@ const getBoardListQuery = (userId: string): PipelineStage[] => {
     // Lookup workspace details
     { $lookup: { from: 'workspaces', localField: 'workspaceId', foreignField: '_id', as: 'workspace' } },
     { $unwind: { path: '$workspace', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 1, name: 1, description: 1, members: 1, workspace: 1 } },
+    { $project: { _id: 1, name: 1, description: 1, createdAt: 1, members: 1, workspace: 1 } },
   ];
 };
