@@ -200,6 +200,12 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
     const members = await MemberModel.find({ boardId: statusExist.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
+    const { io } = getSocket();
+    if (io)
+      io.to(status?.board_id?.toString() ?? '').emit('remove_status', {
+        data: status,
+      });
+
     await saveRecentActivity(
       user._id.toString(),
       'Updated',

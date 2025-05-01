@@ -155,11 +155,25 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
       });
     }
     const taskLabel = await CommentModel.findByIdAndDelete({ _id: id }, { session });
+    const updatedComment: any = await CommentModel.findById(id)
+      .lean()
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'commented_by',
+        select: '_id first_name middle_name last_name email profile_image status',
+      });
 
     await session.commitTransaction();
     session.endSession();
 
     const { io } = getSocket();
+    if (io)
+      io.to(updatedComment?.task_id?.board_id?.toString() ?? '').emit('remove_comment', {
+        data: taskLabel,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({

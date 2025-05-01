@@ -131,6 +131,10 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
     let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
+    if (io)
+      io.to(taskExist?.board_id?.toString() ?? '').emit('remove_task_label', {
+        data: taskLabel,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         visibleUserIds.push(member?.member_id.toString());

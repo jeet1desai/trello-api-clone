@@ -305,6 +305,11 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
     const members = await MemberModel.find({ boardId: taskExist.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
+    const { io } = getSocket();
+    if (io)
+      io.to(status?.board_id?.toString() ?? '').emit('remove_task', {
+        data: status,
+      });
     await saveRecentActivity(
       user._id.toString(),
       'Deleted',
@@ -434,6 +439,10 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
     let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
+    if (io)
+      io.to(updateAttachment?.board_id?.toString() ?? '').emit('remove_task_attachment', {
+        data: updateAttachment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         visibleUserIds.push(member?.member_id.toString());
