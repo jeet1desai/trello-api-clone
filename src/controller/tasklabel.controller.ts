@@ -39,7 +39,7 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       label_id,
     });
 
-    const taskLabel = await TaskLabelModel.findById(newTaskLabel._id)
+    const taskLabel: any = await TaskLabelModel.findById(newTaskLabel._id)
       .populate({
         path: 'task_id',
         select: '_id title description board_id status_list_id position position',
@@ -52,6 +52,10 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
     let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
+    if (io)
+      io.to(taskLabel?.task_id?.board_id?.toString() ?? '').emit('receive-new-task-label', {
+        data: taskLabel,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         visibleUserIds.push(member?.member_id.toString());
@@ -61,7 +65,6 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'receive-new-task-label', { data: taskLabel });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }

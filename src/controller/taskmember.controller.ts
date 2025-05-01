@@ -39,7 +39,7 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       member_id,
     });
 
-    const taskMembers = await TaskMemberModel.findOne({ _id: newTaskMember._id })
+    const taskMembers: any = await TaskMemberModel.findOne({ _id: newTaskMember._id })
       .populate({
         path: 'task_id',
         select: '_id title description board_id status_list_id position position',
@@ -50,6 +50,10 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       });
 
     const { io } = getSocket();
+    if (io)
+      io.to(taskMembers?.task_id?.board_id?.toString() ?? '').emit('receive_new_task-member', {
+        data: taskMembers,
+      });
     if (memberDetails._id.toString()) {
       const notification = await NotificationModel.create({
         message: `Welcome, You added as a member in this task`,
@@ -58,7 +62,6 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
         sender: user,
       });
 
-      emitToUser(io, memberDetails._id.toString(), 'receive_new_task-member', { data: taskMembers });
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
     }
 
@@ -122,7 +125,7 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
     }
     const taskExist = await TaskModel.findOne({ _id: taskId });
 
-    const taskMembers = await TaskMemberModel.findOne({ _id: memberId })
+    const taskMembers: any = await TaskMemberModel.findOne({ _id: memberId })
       .populate({
         path: 'task_id',
         select: '_id title description board_id status_list_id position position',
@@ -136,6 +139,10 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
     const taksMember = await TaskMemberModel.findOneAndDelete({ task_id: taskId, member_id: memberId }, { session });
 
     const { io } = getSocket();
+    if (io)
+      io.to(taskExist?.board_id?.toString() ?? '').emit('task-member-removed', {
+        data: taskMemberExist,
+      });
     if (taskMemberExist?.member_id.toString()) {
       const notification = await NotificationModel.create({
         message: `You removed as a member from this task`,
@@ -145,7 +152,6 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       });
 
       emitToUser(io, taskMemberExist?.member_id.toString(), 'receive_notification', { data: notification });
-      emitToUser(io, taskMemberExist?.member_id.toString(), 'task-member-removed', { data: taskMemberExist });
     }
     await session.commitTransaction();
     session.endSession();

@@ -45,7 +45,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       }));
     }
 
-    const newComment = await CommentModel.create({
+    const newComment: any = await CommentModel.create({
       comment,
       task_id,
       attachment: attachmentsData,
@@ -63,6 +63,10 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       });
 
     const { io } = getSocket();
+    if (io)
+      io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
+        data: newComment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({
@@ -71,7 +75,6 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'receive_new_comment', { data: newComment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
@@ -288,6 +291,10 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
     }
 
     const { io } = getSocket();
+    if (io)
+      io.to(updatedComment?.task_id?.board_id?.toString() ?? '').emit('receive_updated_comment', {
+        data: updatedComment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({
@@ -296,7 +303,6 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'receive_updated_comment', { data: updatedComment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }

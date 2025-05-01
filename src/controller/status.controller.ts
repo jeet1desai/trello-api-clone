@@ -6,10 +6,9 @@ import { validateRequest } from '../utils/validation.utils';
 import { createStatusSchema } from '../schemas/status.schema';
 import { StatusModel } from '../model/status.model';
 import mongoose from 'mongoose';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
-import { emitToUser } from '../utils/socket';
 
 export const createStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -36,9 +35,10 @@ export const createStatusHandler = async (req: Request, res: Response, next: Nex
     });
 
     const { io } = getSocket();
-    if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'receive_status', { data: status });
-    }
+    if (io)
+      io.to(status?.board_id?.toString() ?? '').emit('receive_status', {
+        data: status,
+      });
 
     const members = await MemberModel.find({ boardId: board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
@@ -150,12 +150,10 @@ export const updateStatusHandler: RequestHandler = async (req: Request, res: Res
     }
 
     const { io } = getSocket();
-    const socketId = users.get(user._id.toString());
-    if (socketId) {
-      emitToUser(io, user._id.toString(), 'receive_updated_status', { data: !updated ? movingStatus : updatedData });
-    } else {
-      console.warn(`No socket connection found for user: ${user._id.toString()}`);
-    }
+    if (io)
+      io.to(movingStatus.board_id?.toString() ?? '').emit('receive_updated_status', {
+        data: !updated ? movingStatus : updatedData,
+      });
 
     const message =
       updated && newPosition !== undefined && newPosition !== movingStatus.position
@@ -173,7 +171,7 @@ export const updateStatusHandler: RequestHandler = async (req: Request, res: Res
       user._id.toString(),
       'Updated',
       'Status',
-      movingStatus.board_id?.toString() || '',
+      movingStatus.board_id?.toString() ?? '',
       visibleUserIds,
       `Status has been updated by ${user.first_name}`
     );
@@ -206,7 +204,7 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
       user._id.toString(),
       'Updated',
       'Status',
-      statusExist.board_id?.toString() || '',
+      statusExist.board_id?.toString() ?? '',
       visibleUserIds,
       `Status has been deleted by ${user.first_name}`
     );

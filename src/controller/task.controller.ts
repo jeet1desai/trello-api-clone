@@ -6,7 +6,7 @@ import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
 import { attachmentSchema, createTaskSchema } from '../schemas/task.schema';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { emitToUser } from '../utils/socket';
@@ -35,7 +35,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
 
     const nextPosition = lastTask ? lastTask.position + 1 : 1;
 
-    const newTask = await TaskModel.create({
+    const newTask: any = await TaskModel.create({
       title,
       status_list_id,
       board_id,
@@ -44,9 +44,10 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     });
 
     const { io } = getSocket();
-    if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'receive-new-task', { data: newTask });
-    }
+    if (io)
+      io.to(newTask.board_id?.toString() ?? '').emit('receive-new-task', {
+        data: newTask,
+      });
 
     const members = await MemberModel.find({ boardId: board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
@@ -260,9 +261,10 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
 
     const { io } = getSocket();
 
-    if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'receive-updated-task', { data: !updated ? movingTask : updatedtData1 });
-    }
+    if (io)
+      io.to(movingTask.board_id?.toString() ?? '').emit('receive-updated-task', {
+        data: !updated ? movingTask : updatedtData1,
+      });
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
 
@@ -273,7 +275,7 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
       user._id.toString(),
       'Updated',
       'Task',
-      movingTask?.board_id?.toString() || '',
+      movingTask?.board_id?.toString() ?? '',
       visibleUserIds,
       `Task was udpated by ${user.first_name}`
     );
@@ -307,7 +309,7 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       user._id.toString(),
       'Deleted',
       'Task',
-      taskExist?.board_id?.toString() || '',
+      taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
       `Task was deleted by ${user.first_name}`
     );
@@ -369,6 +371,10 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
     let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
+    if (io)
+      io.to(updateAttachment?.board_id?.toString() ?? '').emit('upload-attachment-task', {
+        data: updateAttachment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         visibleUserIds.push(member?.member_id.toString());
@@ -378,7 +384,6 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'upload-attachment-task', { data: updateAttachment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
@@ -387,7 +392,7 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       user._id.toString(),
       'Uploaded',
       'Attachment',
-      taskExist?.board_id?.toString() || '',
+      taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
       `Attachment has been uploaded by ${user.first_name}`
     );
@@ -446,7 +451,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       user._id.toString(),
       'Deleted',
       'Attachment',
-      taskExist?.board_id?.toString() || '',
+      taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
       `Attachment has been deleted by ${user.first_name}`
     );
