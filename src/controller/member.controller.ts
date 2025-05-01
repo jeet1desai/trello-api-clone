@@ -102,6 +102,12 @@ export const removeMemberController = async (req: express.Request, res: express.
 
     emitToUser(io, uid, 'receive_notification', { data: notification });
 
+    if (io) {
+      io.to(bid?.toString() ?? "").emit('remove_member', {
+        data: targetMember
+      });
+    }
+
     await session.commitTransaction();
     session.endSession();
 

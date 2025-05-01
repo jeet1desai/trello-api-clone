@@ -110,6 +110,17 @@ export const updateInvitationDetailController = async (req: express.Request, res
     invitation.status = status;
     const updatedInvitation = await invitation.save();
 
+    const invitationNew = await MemberModel.find({ boardId: invitation.boardId })
+      .populate('boardId', 'name')
+      .populate('workspaceId', 'name')
+      .populate('memberId', 'first_name last_name email');
+
+    if (io) {
+      io.to(invitation?.boardId?.toString() ?? "").emit('receive_new_member', {
+        data: invitationNew
+      });
+    }
+
     APIResponse(res, true, HttpStatusCode.OK, 'Invitation successfully updated', updatedInvitation);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
