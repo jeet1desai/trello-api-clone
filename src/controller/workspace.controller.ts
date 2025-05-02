@@ -116,10 +116,19 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
   try {
     // @ts-expect-error
     const user = req?.user;
-    const { page, perPage, search, sortType } = req.body;
+    const { page = '1', perPage = '10', search, sortType } = req?.body || {};
+
     const parsedPage = Number(page) || 1;
     const parsedLimit = Number(perPage) || 10;
-    const { skip, limit, page: currentPage } = getPagination({ page: parsedPage, limit: parsedLimit });
+
+    const {
+      skip,
+      limit,
+      page: currentPage,
+    } = getPagination({
+      page: parsedPage,
+      limit: parsedLimit,
+    });
 
     const sortOption = getSortOption(parseInt(sortType) || WorkspaceSortType.CreatedDateDesc);
 
