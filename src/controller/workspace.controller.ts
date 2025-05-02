@@ -5,7 +5,7 @@ import { HttpStatusCode } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import { createWorkspaceSchema } from '../schemas/workspace.schema';
-import { getSortOption, MEMBER_ROLES, WorkspaceSortType } from '../config/app.config';
+import { getSortOption, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
 import { BoardModel } from '../model/board.model';
@@ -130,7 +130,7 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
       limit: parsedLimit,
     });
 
-    const sortOption = getSortOption(parseInt(sortType) || WorkspaceSortType.CreatedDateDesc);
+    const sortOption = getSortOption(parseInt(sortType) || SORT_TYPE.CreatedDateDesc);
 
     // 1. Get workspaceIds from boards where user is a member
     const boards = await MemberModel.find({ memberId: user._id, role: MEMBER_ROLES.MEMBER });
