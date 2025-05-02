@@ -5,6 +5,8 @@ import { HttpStatusCode } from '../helper/enum';
 import { validateRequest } from '../utils/validation.utils';
 import { contactUsSchema } from '../schemas/contactUs.schema';
 import ContactUsModel from '../model/contactUs.model';
+import { sendEmail } from '../utils/sendEmail';
+import ejs from 'ejs';
 
 const ContactUs: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -16,6 +18,20 @@ const ContactUs: RequestHandler = async (request: Request, response: Response, n
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'Something went wrong..!');
       return;
     }
+
+    const templatePath = __dirname + '/../helper/email-templates/contact-us.ejs';
+    const html = await ejs.renderFile(templatePath, {
+      name: newContactUsRequest.name,
+      description: newContactUsRequest.description,
+    });
+
+    const mailOptions: any = {
+      to: process.env.EMAIL,
+      subject: 'Want to collaborate',
+      html,
+    };
+
+    await sendEmail(mailOptions);
 
     APIResponse(response, true, HttpStatusCode.CREATED, 'Your request send successfully..!');
   } catch (error: unknown) {
