@@ -116,10 +116,10 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
   try {
     // @ts-expect-error
     const user = req?.user;
-    const { page = '1', perPage = '10', search, sortType } = req?.body || {};
+    const { page = '1', perPage = '9', search = '', sortType } = req?.query || {};
 
     const parsedPage = Number(page) || 1;
-    const parsedLimit = Number(perPage) || 10;
+    const parsedLimit = Number(perPage) || 9;
 
     const {
       skip,
@@ -130,7 +130,7 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
       limit: parsedLimit,
     });
 
-    const sortOption = getSortOption(parseInt(sortType) || SORT_TYPE.CreatedDateDesc);
+    const sortOption = getSortOption(parseInt(sortType as string) || SORT_TYPE.CreatedDateDesc);
 
     // 1. Get workspaceIds from boards where user is a member
     const boards = await MemberModel.find({ memberId: user._id, role: MEMBER_ROLES.MEMBER });

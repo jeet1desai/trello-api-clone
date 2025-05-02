@@ -541,11 +541,10 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   try {
     // @ts-expect-error
     const user = req.user;
-
-    const { page = 1, perPage = 10, search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.body || {};
+    const { page = '1', perPage = '9', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
 
     const parsedPage = Number(page) || 1;
-    const parsedLimit = Number(perPage) || 10;
+    const parsedLimit = Number(perPage) || 9;
 
     const {
       skip,
@@ -556,10 +555,10 @@ export const getBoardsController = async (req: express.Request, res: express.Res
       limit: parsedLimit,
     });
     // Get the sorting option based on sortType
-    const sortOption = getSortOption(parseInt(sortType) || SORT_TYPE.CreatedDateDesc);
+    const sortOption = getSortOption(parseInt(sortType as string) || SORT_TYPE.CreatedDateDesc);
 
     // Create base pipeline
-    const pipeline = getBoardListQuery(user._id.toString(), search, sortOption);
+    const pipeline = getBoardListQuery(user._id.toString(), search as string, sortOption);
 
     // Paginated pipeline
     const paginatedPipeline = [...pipeline, { $skip: skip }, { $limit: limit }];
