@@ -8,17 +8,15 @@ import { MEMBER_ROLES } from '../config/app.config';
 import { BoardInviteModel } from '../model/boardInvite.model';
 import User from '../model/user.model';
 import { NotificationModel } from '../model/notification.model';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { emitToUser } from '../utils/socket';
 
 export const getMemberListController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const { id } = req.params;
+    const { search = '' } = req.query;
 
-    const members = await MemberModel.find({ boardId: id })
-      .populate('boardId', 'name')
-      .populate('workspaceId', 'name')
-      .populate('memberId', 'first_name last_name email');
+    const members = await getBoardMembersBySearch(id, search as string);
 
     APIResponse(res, true, HttpStatusCode.OK, 'Members successfully fetched', members);
   } catch (err) {
@@ -103,8 +101,8 @@ export const removeMemberController = async (req: express.Request, res: express.
     emitToUser(io, uid, 'receive_notification', { data: notification });
 
     if (io) {
-      io.to(bid?.toString() ?? "").emit('remove_member', {
-        data: targetMember
+      io.to(bid?.toString() ?? '').emit('remove_member', {
+        data: targetMember,
       });
     }
 
@@ -120,4 +118,69 @@ export const removeMemberController = async (req: express.Request, res: express.
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
+};
+
+export const getBoardMembersBySearch = async (boardId: string, search: string = '') => {
+  return MemberModel.aggregate([
+    { $match: { boardId: new mongoose.Types.ObjectId(boardId) } },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'memberId',
+        foreignField: '_id',
+        as: 'memberDetails',
+      },
+    },
+    { $unwind: '$memberDetails' },
+    {
+      $match: {
+        $or: [
+          { 'memberDetails.first_name': { $regex: search, $options: 'i' } },
+          { 'memberDetails.last_name': { $regex: search, $options: 'i' } },
+          {
+            $expr: {
+              $regexMatch: {
+                input: { $concat: ['$memberDetails.first_name', ' ', '$memberDetails.last_name'] },
+                regex: search,
+                options: 'i',
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: 'boards',
+        localField: 'boardId',
+        foreignField: '_id',
+        as: 'board',
+      },
+    },
+    { $unwind: '$board' },
+    {
+      $lookup: {
+        from: 'workspaces',
+        localField: 'workspaceId',
+        foreignField: '_id',
+        as: 'workspace',
+      },
+    },
+    { $unwind: '$workspace' },
+    {
+      $project: {
+        _id: 1,
+        boardId: '$board._id',
+        boardName: '$board.name',
+        workspaceId: '$workspace._id',
+        workspaceName: '$workspace.name',
+        member: {
+          _id: '$memberDetails._id',
+          first_name: '$memberDetails.first_name',
+          last_name: '$memberDetails.last_name',
+          email: '$memberDetails.email',
+        },
+      },
+    },
+  ]);
 };
