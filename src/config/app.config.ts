@@ -24,6 +24,28 @@ export enum MEMBER_INVITE_STATUS {
   REJECTED = 'REJECTED',
 }
 
+export enum WorkspaceSortType {
+  NameAsc = 1,
+  NameDesc = 2,
+  CreatedDateAsc = 3,
+  CreatedDateDesc = 4,
+}
+
 export const convertObjectId = (id: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
+};
+
+export const getSortOption = (sortType: WorkspaceSortType): Record<string, 1 | -1> => {
+  switch (sortType) {
+    case WorkspaceSortType.NameAsc:
+      return { name: 1 };
+    case WorkspaceSortType.NameDesc:
+      return { name: -1 };
+    case WorkspaceSortType.CreatedDateAsc:
+      return { createdAt: 1 };
+    case WorkspaceSortType.CreatedDateDesc:
+      return { createdAt: -1 };
+    default:
+      return { createdAt: -1 }; // fallback
+  }
 };
