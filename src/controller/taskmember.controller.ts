@@ -337,19 +337,20 @@ const getTaskMembersBySearch = async (taskId: string, search: string = '') => {
         from: 'users',
         localField: 'member_id',
         foreignField: '_id',
-        as: 'member',
+        as: 'memberId',
       },
     },
-    { $unwind: '$member' },
+    { $unwind: '$memberId' },
+    // Search filter
     {
       $match: {
         $or: [
-          { 'member.first_name': { $regex: search, $options: 'i' } },
-          { 'member.last_name': { $regex: search, $options: 'i' } },
+          { 'memberId.first_name': { $regex: search, $options: 'i' } },
+          { 'memberId.last_name': { $regex: search, $options: 'i' } },
           {
             $expr: {
               $regexMatch: {
-                input: { $concat: ['$member.first_name', ' ', '$member.last_name'] },
+                input: { $concat: ['$memberId.first_name', ' ', '$memberId.last_name'] },
                 regex: search,
                 options: 'i',
               },
@@ -361,20 +362,24 @@ const getTaskMembersBySearch = async (taskId: string, search: string = '') => {
     {
       $project: {
         _id: 1,
-        task_id: '$task._id',
-        title: '$task.title',
-        description: '$task.description',
-        board_id: '$task.board_id',
-        status_list_id: '$task.status_list_id',
-        position: '$task.position',
-        member: {
-          _id: '$member._id',
-          first_name: '$member.first_name',
-          middle_name: '$member.middle_name',
-          last_name: '$member.last_name',
-          email: '$member.email',
-          profile_image: '$member.profile_image',
+        task_id: {
+          _id: '$task_id',
+          title: '$task.title',
+          description: '$task.description',
+          board_id: '$task.board_id',
+          status_list_id: '$task.status_list_id',
+          position: '$task.position',
         },
+        member_id: {
+          _id: '$memberId._id',
+          first_name: '$memberId.first_name',
+          middle_name: '$memberId.middle_name',
+          last_name: '$memberId.last_name',
+          email: '$memberId.email',
+        },
+        createdAt: 1,
+        updatedAt: 1,
+        __v: 1,
       },
     },
   ]);
