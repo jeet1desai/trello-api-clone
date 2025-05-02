@@ -170,11 +170,19 @@ const getBoardMembersBySearch = async (boardId: string, search: string = '') => 
     {
       $project: {
         _id: 1,
-        boardId: '$board._id',
-        boardName: '$board.name',
-        workspaceId: '$workspace._id',
-        workspaceName: '$workspace.name',
-        member: {
+        createdAt: 1,
+        updatedAt: 1,
+        __v: 1,
+        role: 1,
+        boardId: {
+          _id: '$board._id',
+          name: '$board.name',
+        },
+        workspaceId: {
+          _id: '$workspace._id',
+          name: '$workspace.name',
+        },
+        memberId: {
           _id: '$memberDetails._id',
           first_name: '$memberDetails.first_name',
           last_name: '$memberDetails.last_name',
