@@ -1,15 +1,17 @@
 import express from 'express';
-import { WorkSpaceModel } from '../model/workspace.model';
+import { WorkSpaceModel, WorkspaceModelType } from '../model/workspace.model';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import { createWorkspaceSchema } from '../schemas/workspace.schema';
-import { MEMBER_ROLES } from '../config/app.config';
+import { getSortOption, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
 import { BoardModel } from '../model/board.model';
 import { getWorkspaceBoardsQuery } from './board.controller';
+import { FilterQuery } from 'mongoose';
+import { getPagination } from '../utils/pagination';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -114,17 +116,57 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
   try {
     // @ts-expect-error
     const user = req?.user;
+    const { page = '1', perPage = '10', search, sortType } = req?.body || {};
+
+    const parsedPage = Number(page) || 1;
+    const parsedLimit = Number(perPage) || 10;
+
+    const {
+      skip,
+      limit,
+      page: currentPage,
+    } = getPagination({
+      page: parsedPage,
+      limit: parsedLimit,
+    });
+
+    const sortOption = getSortOption(parseInt(sortType) || SORT_TYPE.CreatedDateDesc);
 
     // 1. Get workspaceIds from boards where user is a member
     const boards = await MemberModel.find({ memberId: user._id, role: MEMBER_ROLES.MEMBER });
     const boardWorkspaceIds = boards.map((board) => board?.workspaceId?.toString());
 
-    // 2. Find workspaces where user is creator or has a board inside
-    const workspaces = await WorkSpaceModel.find({
-      $or: [{ createdBy: user._id }, { _id: { $in: boardWorkspaceIds } }],
-    }).populate('createdBy', 'first_name last_name email');
+    // 2. Find workspaces where user is creator or has a board inside if search
+    const filters: FilterQuery<WorkspaceModelType> = {
+      $and: [
+        {
+          $or: [{ createdBy: user._id }, { _id: { $in: boardWorkspaceIds } }],
+        },
+      ],
+    };
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspaces);
+    if (search) {
+      filters.name = { $regex: search, $options: 'i' };
+    }
+
+    // 3. Get total count (for pagination metadata) ** Apply pagination, sorting, and populate
+    const [workspaces, totalCount] = await Promise.all([
+      WorkSpaceModel.find(filters).populate('createdBy', 'first_name last_name email').sort(sortOption).skip(skip).limit(limit),
+      WorkSpaceModel.countDocuments(filters),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // 4. Return response
+    APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', {
+      workspaces: workspaces,
+      pagination: {
+        currentPage,
+        totalPages,
+        totalRecords: totalCount,
+        limit,
+      },
+    });
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);

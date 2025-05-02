@@ -6,7 +6,7 @@ import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import mongoose, { PipelineStage } from 'mongoose';
 import { BoardModel } from '../model/board.model';
-import { convertObjectId, MEMBER_INVITE_STATUS, MEMBER_ROLES } from '../config/app.config';
+import { convertObjectId, getSortOption, MEMBER_INVITE_STATUS, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
 import { WorkSpaceModel } from '../model/workspace.model';
 import { MemberModel } from '../model/members.model';
 import User from '../model/user.model';
@@ -17,6 +17,7 @@ import { getSocket, users } from '../config/socketio.config';
 import { NotificationModel } from '../model/notification.model';
 import { emitToUser } from '../utils/socket';
 import { saveRecentActivity } from '../helper/recentActivityService';
+import { getPagination } from '../utils/pagination';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -541,9 +542,46 @@ export const getBoardsController = async (req: express.Request, res: express.Res
     // @ts-expect-error
     const user = req.user;
 
-    const boards = await BoardModel.aggregate(getBoardListQuery(user._id.toString()));
+    const { page = 1, perPage = 10, search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.body || {};
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', boards);
+    const parsedPage = Number(page) || 1;
+    const parsedLimit = Number(perPage) || 10;
+
+    const {
+      skip,
+      limit,
+      page: currentPage,
+    } = getPagination({
+      page: parsedPage,
+      limit: parsedLimit,
+    });
+    // Get the sorting option based on sortType
+    const sortOption = getSortOption(parseInt(sortType) || SORT_TYPE.CreatedDateDesc);
+
+    // Create base pipeline
+    const pipeline = getBoardListQuery(user._id.toString(), search, sortOption);
+
+    // Paginated pipeline
+    const paginatedPipeline = [...pipeline, { $skip: skip }, { $limit: limit }];
+
+    // Execute paginated query
+    const boards = await BoardModel.aggregate(paginatedPipeline);
+
+    // Get total count for pagination (same filter logic but no skip/limit)
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await BoardModel.aggregate(countPipeline);
+    const totalRecords = countResult[0]?.total || 0;
+
+    // Send response
+    APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', {
+      boards,
+      pagination: {
+        currentPage,
+        totalPages: Math.ceil(totalRecords / limit),
+        totalRecords,
+        limit,
+      },
+    });
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -551,8 +589,8 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   }
 };
 
-const getBoardListQuery = (userId: string): PipelineStage[] => {
-  return [
+const getBoardListQuery = (userId: string, search: string, sortOption: Record<string, 1 | -1>): PipelineStage[] => {
+  const pipeline: PipelineStage[] = [
     // Find boards where the user is a member or admin
     {
       $lookup: {
@@ -571,6 +609,7 @@ const getBoardListQuery = (userId: string): PipelineStage[] => {
       },
     },
     { $match: { $expr: { $gt: [{ $size: '$membership' }, 0] } } },
+
     // Get all members of the board
     {
       $lookup: {
@@ -595,9 +634,28 @@ const getBoardListQuery = (userId: string): PipelineStage[] => {
         as: 'members',
       },
     },
+
     // Lookup workspace details
     { $lookup: { from: 'workspaces', localField: 'workspaceId', foreignField: '_id', as: 'workspace' } },
     { $unwind: { path: '$workspace', preserveNullAndEmptyArrays: true } },
+
+    // Apply search filter if present
+    ...(search
+      ? [
+          {
+            $match: {
+              $or: [{ name: { $regex: search, $options: 'i' } }],
+            },
+          },
+        ]
+      : []),
+
+    // Sort the result based on sortOption
+    { $sort: sortOption },
+
+    // Project the desired fields
     { $project: { _id: 1, name: 1, description: 1, createdAt: 1, members: 1, workspace: 1 } },
   ];
+
+  return pipeline;
 };
