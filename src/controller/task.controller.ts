@@ -19,6 +19,14 @@ import { CommentModel } from '../model/comment.model';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
 
+type BaseQuery = {
+  status_list_id: string;
+};
+
+type FilterQuery = BaseQuery & {
+  $or?: Array<{ assigned_to: string } | { created_by: string } | { _id: { $in: string[] } }>;
+};
+
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await validateRequest(req.body, createTaskSchema);
@@ -66,8 +74,31 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
 
 export const getTaskByStatusIdHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { statusId } = req.query;
-    const tasks = await TaskModel.find({ status_list_id: statusId })
+    // @ts-expect-error
+    const user = req?.user;
+
+    const { statusId, filterType = 'me' } = req.query;
+
+    const isFilteringByUser = filterType !== 'all' && user?._id;
+
+    // 1. Get task IDs where user is a member
+    let taskIdsWithMembership: string[] = [];
+    if (isFilteringByUser) {
+      const memberTasks = await TaskMemberModel.find({ user_id: user._id }).select('task_id');
+      taskIdsWithMembership = memberTasks.map((m) => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+    }
+
+    // 2. Construct query
+    const query: FilterQuery = {
+      status_list_id: statusId as string,
+    };
+
+    if (isFilteringByUser) {
+      query.$or = [{ assigned_to: user._id }, { created_by: user._id }, { _id: { $in: taskIdsWithMembership } }];
+    }
+
+    // 3. Fetch tasks
+    const tasks = await TaskModel.find(query)
       .sort({ position: 1 })
       .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
       .populate({
@@ -86,21 +117,23 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
         select: '_id first_name last_name',
       });
 
+    // 4. Enhance task details
     const taskList = await Promise.all(
       tasks.map(async (task) => {
-        const taskLabels = await TaskLabelModel.find({ task_id: task._id }).populate({
-          path: 'label_id',
-          select: '_id name backgroundColor textColor boardId',
-        });
-
-        const taskComment = await CommentModel.countDocuments({ task_id: task._id });
-        const taskMembers = await TaskMemberModel.countDocuments({ task_id: task._id });
+        const [taskLabels, commentCount, memberCount] = await Promise.all([
+          TaskLabelModel.find({ task_id: task._id }).populate({
+            path: 'label_id',
+            select: '_id name backgroundColor textColor boardId',
+          }),
+          CommentModel.countDocuments({ task_id: task._id }),
+          TaskMemberModel.countDocuments({ task_id: task._id }),
+        ]);
 
         return {
           ...task.toObject(),
           labels: taskLabels.map((tl) => tl.label_id),
-          comments: taskComment,
-          members: taskMembers,
+          comments: commentCount,
+          members: memberCount,
         };
       })
     );
