@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { Priority, TaskStatus } from '../helper/enum';
 
 export interface TaskModelType {
   _id?: mongoose.Schema.Types.ObjectId;
