@@ -91,17 +91,9 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
 export const getTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { taskId } = req.params;
-    const taskMembers = await TaskMemberModel.find({ task_id: taskId })
+    const { search = '' } = req.query;
 
-      .populate({
-        path: 'task_id',
-        select: '_id title description board_id status_list_id position position',
-      })
-      .populate({
-        path: 'member_id',
-        select: '_id first_name  middle_name last_name email profile_image',
-      });
-
+    const taskMembers = await getTaskMembersBySearch(taskId, search as string);
     APIResponse(res, true, HttpStatusCode.OK, 'Task member successfully fetched', taskMembers);
   } catch (err) {
     if (err instanceof Error) {
@@ -177,4 +169,68 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
+};
+
+const getTaskMembersBySearch = async (taskId: string, search: string = '') => {
+  return TaskMemberModel.aggregate([
+    {
+      $match: {
+        task_id: new mongoose.Types.ObjectId(taskId),
+      },
+    },
+    {
+      $lookup: {
+        from: 'tasks',
+        localField: 'task_id',
+        foreignField: '_id',
+        as: 'task',
+      },
+    },
+    { $unwind: '$task' },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'member_id',
+        foreignField: '_id',
+        as: 'member',
+      },
+    },
+    { $unwind: '$member' },
+    {
+      $match: {
+        $or: [
+          { 'member.first_name': { $regex: search, $options: 'i' } },
+          { 'member.last_name': { $regex: search, $options: 'i' } },
+          {
+            $expr: {
+              $regexMatch: {
+                input: { $concat: ['$member.first_name', ' ', '$member.last_name'] },
+                regex: search,
+                options: 'i',
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        task_id: '$task._id',
+        title: '$task.title',
+        description: '$task.description',
+        board_id: '$task.board_id',
+        status_list_id: '$task.status_list_id',
+        position: '$task.position',
+        member: {
+          _id: '$member._id',
+          first_name: '$member.first_name',
+          middle_name: '$member.middle_name',
+          last_name: '$member.last_name',
+          email: '$member.email',
+          profile_image: '$member.profile_image',
+        },
+      },
+    },
+  ]);
 };

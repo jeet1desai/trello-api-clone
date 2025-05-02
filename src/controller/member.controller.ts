@@ -120,7 +120,7 @@ export const removeMemberController = async (req: express.Request, res: express.
   }
 };
 
-export const getBoardMembersBySearch = async (boardId: string, search: string = '') => {
+const getBoardMembersBySearch = async (boardId: string, search: string = '') => {
   return MemberModel.aggregate([
     { $match: { boardId: new mongoose.Types.ObjectId(boardId) } },
     {
