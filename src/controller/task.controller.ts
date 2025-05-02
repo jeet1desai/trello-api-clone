@@ -69,7 +69,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const { statusId } = req.query;
     const tasks = await TaskModel.find({ status_list_id: statusId })
       .sort({ position: 1 })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -80,6 +80,10 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
             select: '_id name description',
           },
         ],
+      })
+      .populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
       });
 
     const taskList = await Promise.all(
@@ -90,11 +94,13 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
         });
 
         const taskComment = await CommentModel.countDocuments({ task_id: task._id });
+        const taskMembers = await TaskMemberModel.countDocuments({ task_id: task._id });
 
         return {
           ...task.toObject(),
           labels: taskLabels.map((tl) => tl.label_id),
           comments: taskComment,
+          members: taskMembers,
         };
       })
     );
@@ -111,7 +117,7 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
   try {
     const { id } = req.params;
     const tasks = await TaskModel.findById({ _id: id })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -125,7 +131,11 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
       })
       .populate({
         path: 'created_by',
-        select: '_id first_name  middle_name last_name email profile_image',
+        select: '_id first_name middle_name last_name email profile_image',
+      })
+      .populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
       });
 
     APIResponse(res, true, HttpStatusCode.OK, 'Task details successfully fetched', tasks);
