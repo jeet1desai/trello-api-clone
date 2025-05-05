@@ -541,10 +541,10 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   try {
     // @ts-expect-error
     const user = req.user;
-    const { page = '1', perPage = '9', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
+    const { page = '1', perPage = '8', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
 
     const parsedPage = Number(page) || 1;
-    const parsedLimit = Number(perPage) || 9;
+    const parsedLimit = Number(perPage) || 8;
 
     const {
       skip,
