@@ -24,7 +24,7 @@ type BaseQuery = {
 };
 
 type FilterQuery = BaseQuery & {
-  $or?: Array<{ assigned_to: string } | { created_by: string } | { _id: { $in: string[] } }>;
+  $or?: Array<{ assigned_to: string | { $in: string[] } } | { created_by: string | { $in: string[] } } | { _id: { $in: string[] } }>;
 };
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -74,27 +74,54 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
 
 export const getTaskByStatusIdHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // @ts-expect-error
+    //@ts-expect-error
     const user = req?.user;
+    const currentUserId = user._id;
 
-    const { statusId, filterType = 'me' } = req.query;
+    const { statusId, filterBy: filterByRaw } = req.body;
 
-    const isFilteringByUser = filterType !== 'all' && user?._id;
-
-    // 1. Get task IDs where user is a member
-    let taskIdsWithMembership: string[] = [];
-    if (isFilteringByUser) {
-      const memberTasks = await TaskMemberModel.find({ user_id: user._id }).select('task_id');
-      taskIdsWithMembership = memberTasks.map((m) => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+    if (!statusId || typeof statusId !== 'string' || !statusId.trim()) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Missing or invalid 'statusId' parameter.");
     }
 
+    if (!mongoose.Types.ObjectId.isValid(statusId)) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Invalid 'statusId' format.");
+    }
+
+    // 1. Get task IDs where user is a member
+    const filterByArray: string[] = Array.isArray(filterByRaw) ? filterByRaw.map(String) : typeof filterByRaw === 'string' ? [filterByRaw] : ['me'];
+
+    const isAll = filterByArray.includes('all');
+    const isMe = filterByArray.includes('me');
+
+    const resolvedFilterBy: string[] = isAll || isMe ? [currentUserId.toString(), ...filterByArray] : filterByArray;
+
+    let taskIdsWithMembership: string[] = [];
+
+    if (!isAll) {
+      const memberTasks = await TaskMemberModel.find({
+        member_id: { $in: resolvedFilterBy },
+      }).select('task_id');
+
+      taskIdsWithMembership = memberTasks.map((m) => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+    }
     // 2. Construct query
     const query: FilterQuery = {
-      status_list_id: statusId as string,
+      status_list_id: statusId,
     };
 
-    if (isFilteringByUser) {
-      query.$or = [{ assigned_to: user._id }, { created_by: user._id }, { _id: { $in: taskIdsWithMembership } }];
+    if (!isAll) {
+      query.$or = [];
+
+      if (isMe) {
+        query.$or.push({ assigned_to: currentUserId }, { created_by: currentUserId }, { _id: { $in: taskIdsWithMembership } });
+      } else {
+        query.$or.push(
+          { assigned_to: { $in: resolvedFilterBy } },
+          { created_by: { $in: resolvedFilterBy } },
+          { _id: { $in: taskIdsWithMembership } }
+        );
+      }
     }
 
     // 3. Fetch tasks
