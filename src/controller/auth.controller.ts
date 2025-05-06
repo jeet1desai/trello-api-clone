@@ -20,6 +20,7 @@ import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
 import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 import { saveFileToCloud } from '../utils/cloudinaryFileUpload';
+import admin from '../config/firebaseAdmin';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -307,8 +308,14 @@ const ResetPassword: RequestHandler = async (request: Request, response: Respons
     const { old_password, new_password } = reqBody;
     await validateRequest(reqBody, resetPasswordSchema);
     const user = (request as any)?.user;
+
     if (!user) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
+      return;
+    }
+
+    if (!user.password) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'Unable to reset password..!');
       return;
     }
 
@@ -352,4 +359,58 @@ const logoutHandler: RequestHandler = async (request: Request, response: Respons
   }
 };
 
-export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler };
+const firebaseSocialLogin: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+  try {
+    const { idToken } = request.body;
+
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+
+    const { email, name, picture, email_verified } = decodedToken;
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Optional auto-creation if allowed
+      user = await User.create({
+        first_name: name || '',
+        email: email,
+        profile_image: picture ?? '',
+        status: true, // You may choose to verify manually
+        is_email_verified: email_verified,
+      });
+    }
+
+    if (!user.status) {
+      return APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'The user has not verified their email..!');
+    }
+
+    const tokenData = {
+      id: user._id,
+      email: user.email,
+    };
+
+    const userData = {
+      _id: user._id,
+      first_name: user.first_name,
+      middle_name: user.middle_name,
+      last_name: user.last_name,
+      email: user.email,
+      profile_image: user.profile_image,
+      status: user.status,
+    };
+
+    const { accessToken, refreshToken } = await generateTokens(tokenData);
+
+    return sendWithCookie({
+      res: response,
+      message: 'Login successful..!',
+      status: 200,
+      data: { user: userData, accessToken, refreshToken },
+    });
+  } catch (error: any) {
+    console.error('Firebase login error:', error?.message || error);
+    return next(error);
+  }
+};
+
+export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler, firebaseSocialLogin };
