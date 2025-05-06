@@ -116,10 +116,10 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
   try {
     // @ts-expect-error
     const user = req?.user;
-    const { page = '1', perPage = '8', search = '', sortType } = req?.query || {};
+    const { page = '1', perPage = '12', search = '', sortType } = req?.query || {};
 
     const parsedPage = Number(page) || 1;
-    const parsedLimit = Number(perPage) || 8;
+    const parsedLimit = Number(perPage) || 12;
 
     const {
       skip,

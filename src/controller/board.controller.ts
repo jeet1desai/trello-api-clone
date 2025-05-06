@@ -297,8 +297,8 @@ export const deleteBoardController = async (req: express.Request, res: express.R
     let visibleUserIds = [user._id.toString()];
 
     for (const member of membersToNotify) {
-      const userToNotify = member.memberId;
-      visibleUserIds.push(userToNotify?.toString());
+      const userToNotify: any = member.memberId;
+      visibleUserIds.push(userToNotify._id?.toString());
       const [notification] = await NotificationModel.create(
         [
           {
@@ -541,10 +541,10 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   try {
     // @ts-expect-error
     const user = req.user;
-    const { page = '1', perPage = '8', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
+    const { page = '1', perPage = '12', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
 
     const parsedPage = Number(page) || 1;
-    const parsedLimit = Number(perPage) || 8;
+    const parsedLimit = Number(perPage) || 12;
 
     const {
       skip,
