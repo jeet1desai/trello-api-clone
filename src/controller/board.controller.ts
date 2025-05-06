@@ -348,6 +348,8 @@ export const deleteBoardController = async (req: express.Request, res: express.R
 
 export const getBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
 
     const [board] = await BoardModel.aggregate(getBoardDetailsQuery(id));
@@ -357,7 +359,11 @@ export const getBoardController = async (req: express.Request, res: express.Resp
       return;
     }
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Board successfully fetched', board);
+    if(board?.members?.map((member: { memberId: any; }) => member.memberId.toString()).includes(user._id?.toString())) {
+      APIResponse(res, true, HttpStatusCode.OK, 'Board successfully fetched', board);
+    } else {
+      APIResponse(res, true, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to view this board');
+    }
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);

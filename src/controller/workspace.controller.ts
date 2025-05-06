@@ -105,16 +105,22 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
 
 export const getWorkSpaceDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
 
-    const workspace = await WorkSpaceModel.findById({ _id: id }).populate('createdBy', 'first_name last_name email');
+    const workspace: any = await WorkSpaceModel.findById({ _id: id }).populate('createdBy', 'first_name last_name email');
 
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
+    if (user._id.toString() === workspace.createdBy._id?.toString()) {
+      APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
+    } else {
+      APIResponse(res, true, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to view this workspace');
+    }
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
