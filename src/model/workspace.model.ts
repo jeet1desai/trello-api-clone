@@ -5,6 +5,7 @@ export interface WorkspaceModelType {
   name: string;
   description: string;
   createdBy: mongoose.Schema.Types.ObjectId;
+  boards: number;
 }
 
 const schema = new mongoose.Schema<WorkspaceModelType>(
@@ -24,6 +25,10 @@ const schema = new mongoose.Schema<WorkspaceModelType>(
       index: true,
       ref: 'users',
     },
+    boards: {
+      type: Number,
+      default: 0,
+    }
   },
   { timestamps: true }
 );
