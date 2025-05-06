@@ -137,10 +137,15 @@ export const updateBoardController = async (req: express.Request, res: express.R
     const { id } = req.params;
     const { name, description, members } = req.body;
 
-    const board = await BoardModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
+    let board: any = await BoardModel.findById({ _id: id });
 
     if (!board) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
+      return;
+    }
+
+    if (board.createdBy.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task');
       return;
     }
 
@@ -149,7 +154,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
-
+    board = await BoardModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
     const boardMembers = await MemberModel.find({ boardId: board._id }).select('memberId');
     let visibleUserIds = new Set([user._id.toString()]);
 
@@ -277,6 +282,10 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       session.endSession();
 
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
+      return;
+    }
+    if (board?.createdBy?.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task');
       return;
     }
 

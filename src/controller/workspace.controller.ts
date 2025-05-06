@@ -42,12 +42,19 @@ export const updateWorkSpaceController = async (req: express.Request, res: expre
     const { name, description } = req.body;
     // @ts-expect-error
     const user = req?.user;
-    const workspace = await WorkSpaceModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
+    let workspace = await WorkSpaceModel.findById({ _id: id });
 
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
+
+    if (workspace.createdBy.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task');
+      return;
+    }
+
+    workspace = await WorkSpaceModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
 
     await saveRecentActivity(user._id.toString(), 'Updated', 'Workspace', '', [user?._id.toString()], `${user.first_name} updated workspace`);
 
@@ -65,7 +72,16 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
     // @ts-expect-error
     const user = req?.user;
     const boards = await BoardModel.aggregate([...getWorkspaceBoardsQuery(id, user._id.toString()), { $count: 'total' }]);
-    let workspace = null;
+    let workspace = await WorkSpaceModel.findById({ _id: id });
+
+    if (!workspace) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
+      return;
+    }
+    if (workspace.createdBy.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task', req.body);
+      return;
+    }
     if (boards[0]?.total > 0) {
       APIResponse(
         res,
@@ -75,14 +91,8 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
         req.body
       );
       return;
-    } else {
-      workspace = await WorkSpaceModel.findByIdAndDelete({ _id: id });
     }
-    if (!workspace) {
-      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
-      return;
-    }
-
+    workspace = await WorkSpaceModel.findByIdAndDelete({ _id: id });
     await saveRecentActivity(user._id.toString(), 'Deleted', 'Workspace', '', [user?._id.toString()], `${user.first_name} deleted workspace`);
 
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully deleted', workspace);
