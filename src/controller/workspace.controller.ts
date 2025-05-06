@@ -105,16 +105,22 @@ export const deleteWorkSpaceController = async (req: express.Request, res: expre
 
 export const getWorkSpaceDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
 
-    const workspace = await WorkSpaceModel.findById({ _id: id }).populate('createdBy', 'first_name last_name email');
+    const workspace: any = await WorkSpaceModel.findById({ _id: id }).populate('createdBy', 'first_name last_name email');
 
     if (!workspace) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
+    if (user._id.toString() === workspace.createdBy._id?.toString()) {
+      APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', workspace);
+    } else {
+      APIResponse(res, true, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to view this workspace');
+    }
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -159,17 +165,34 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
       filters.name = { $regex: search, $options: 'i' };
     }
 
-    // 3. Get total count (for pagination metadata) ** Apply pagination, sorting, and populate
+    // 3. Get total count (for pagination metadata) and fetch workspaces
     const [workspaces, totalCount] = await Promise.all([
       WorkSpaceModel.find(filters).populate('createdBy', 'first_name last_name email').sort(sortOption).skip(skip).limit(limit),
       WorkSpaceModel.countDocuments(filters),
     ]);
 
+    // 4. Get board counts for each workspace
+    const workspacesWithBoardCount = await Promise.all(
+      workspaces.map(async (workspace) => {
+        const boards = await BoardModel.aggregate([
+          ...getWorkspaceBoardsQuery(workspace._id.toString(), user._id.toString()),
+          { $count: 'total' }
+        ]);
+        
+        const count = boards.length > 0 ? boards[0].total : 0;
+        
+        return {
+          ...workspace.toObject(),
+          boards: count
+        };
+      })
+    );
+
     const totalPages = Math.ceil(totalCount / limit);
 
-    // 4. Return response
+    // 5. Return response
     APIResponse(res, true, HttpStatusCode.OK, 'Workspace successfully fetched', {
-      workspaces: workspaces,
+      workspaces: workspacesWithBoardCount,
       pagination: {
         currentPage,
         totalPages,
