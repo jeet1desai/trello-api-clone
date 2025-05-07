@@ -361,22 +361,19 @@ const logoutHandler: RequestHandler = async (request: Request, response: Respons
 
 const firebaseSocialLogin: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
   try {
-    const { idToken } = request.body;
+    const { idToken, screenName } = request.body;
 
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-
-    const { email, name, picture, email_verified } = decodedToken;
+    const userInfo = await getUserDataFromToken(idToken, screenName);
+    const { email, first_name, profile_image } = userInfo;
 
     let user = await User.findOne({ email });
-
     if (!user) {
-      // Optional auto-creation if allowed
       user = await User.create({
-        first_name: name || '',
+        first_name: first_name,
         email: email,
-        profile_image: picture ?? '',
-        status: true, // You may choose to verify manually
-        is_email_verified: email_verified,
+        profile_image: profile_image,
+        status: true,
+        is_email_verified: true,
       });
     }
 
@@ -411,6 +408,22 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
     console.error('Firebase login error:', error?.message || error);
     return next(error);
   }
+};
+
+export const getUserDataFromToken = async (idToken: string, screenName?: string) => {
+  const decodedToken = await admin.auth().verifyIdToken(idToken);
+  const { email, picture, email_verified, firebase, uid } = decodedToken;
+
+  const provider = firebase?.sign_in_provider;
+  const userRecord = await admin.auth().getUser(uid);
+  const firstName = provider === 'github.com' ? screenName || userRecord.displayName || '' : userRecord.displayName || '';
+  return {
+    first_name: firstName,
+    email,
+    profile_image: picture ?? userRecord.photoURL ?? '',
+    status: true,
+    is_email_verified: email_verified,
+  };
 };
 
 export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler, firebaseSocialLogin };
