@@ -20,6 +20,7 @@ import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
 import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 import { saveFileToCloud } from '../utils/cloudinaryFileUpload';
+import admin from '../config/firebaseAdmin';
 
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -238,8 +239,7 @@ const ForgotPassword: RequestHandler = async (request: Request, response: Respon
       return;
     }
 
-    let otp = Math.random();
-    otp = Math.floor(100000 + Math.random() * 900000);
+    const otp = Math.floor(100000 + Math.random() * 900000);
     const templatePath = __dirname + '/../helper/email-templates/sendOTP.ejs';
     const html = await ejs.renderFile(templatePath, { otp });
 
@@ -308,8 +308,14 @@ const ResetPassword: RequestHandler = async (request: Request, response: Respons
     const { old_password, new_password } = reqBody;
     await validateRequest(reqBody, resetPasswordSchema);
     const user = (request as any)?.user;
+
     if (!user) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
+      return;
+    }
+
+    if (!user.password) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'Unable to reset password..!');
       return;
     }
 
@@ -353,4 +359,71 @@ const logoutHandler: RequestHandler = async (request: Request, response: Respons
   }
 };
 
-export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler };
+const firebaseSocialLogin: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+  try {
+    const { idToken, screenName } = request.body;
+
+    const userInfo = await getUserDataFromToken(idToken, screenName);
+    const { email, first_name, profile_image } = userInfo;
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({
+        first_name: first_name,
+        email: email,
+        profile_image: profile_image,
+        status: true,
+        is_email_verified: true,
+      });
+    }
+
+    if (!user.status) {
+      return APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'The user has not verified their email..!');
+    }
+
+    const tokenData = {
+      id: user._id,
+      email: user.email,
+    };
+
+    const userData = {
+      _id: user._id,
+      first_name: user.first_name,
+      middle_name: user.middle_name,
+      last_name: user.last_name,
+      email: user.email,
+      profile_image: user.profile_image,
+      status: user.status,
+    };
+
+    const { accessToken, refreshToken } = await generateTokens(tokenData);
+
+    return sendWithCookie({
+      res: response,
+      message: 'Login successful..!',
+      status: 200,
+      data: { user: userData, accessToken, refreshToken },
+    });
+  } catch (error: any) {
+    console.error('Firebase login error:', error?.message || error);
+    return next(error);
+  }
+};
+
+export const getUserDataFromToken = async (idToken: string, screenName?: string) => {
+  const decodedToken = await admin.auth().verifyIdToken(idToken);
+  const { email, picture, email_verified, firebase, uid } = decodedToken;
+
+  const provider = firebase?.sign_in_provider;
+  const userRecord = await admin.auth().getUser(uid);
+  const firstName = provider === 'github.com' ? screenName ?? userRecord.displayName ?? '' : userRecord.displayName ?? '';
+  return {
+    first_name: firstName,
+    email,
+    profile_image: picture ?? userRecord.photoURL ?? '',
+    status: true,
+    is_email_verified: email_verified,
+  };
+};
+
+export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler, firebaseSocialLogin };

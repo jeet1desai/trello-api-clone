@@ -340,7 +340,7 @@ describe('Board API', () => {
         _id: new mongoose.Types.ObjectId(),
         message: `You have been invited to board "${mockBoard.name}"`,
         receiver: invitedUser._id,
-        sender: mockUser._id,
+        sender: mockUser,
       };
 
       sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(mockBoard as any);
@@ -388,7 +388,7 @@ describe('Board API', () => {
         _id: new mongoose.Types.ObjectId(),
         message: `You have been invited to board "${mockBoard.name}"`,
         receiver: invitedUser._id,
-        sender: mockUser._id,
+        sender: mockUser,
       };
 
       sinon.stub(BoardModel, 'findByIdAndUpdate').resolves(mockBoard as any);
@@ -431,7 +431,7 @@ describe('Board API', () => {
         _id: new mongoose.Types.ObjectId(),
         message: `Board "${mockBoard.name}" is deleted by admin and you have been removed from board`,
         receiver: populatedMember.memberId,
-        sender: mockUser._id,
+        sender: mockUser,
       };
 
       sinon.stub(BoardModel, 'findById').resolves(mockBoard as any);

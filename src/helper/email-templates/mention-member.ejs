@@ -117,26 +117,20 @@
   <div class="email-container">
     <div class="header">
       <div class="logo">BaseTeam</div>
-      <h2>You're invited to join a board</h2>
+      <h2>You're mentioned into comment</h2>
     </div>
 
     <p>Hi <span class="highlight"><%= inviteeName || 'there' %></span>,</p>
 
-    <p><span class="highlight"><%= inviterName %></span> has invited you to collaborate on the board <span class="highlight">"<%= boardName %>"</span> in the workspace <span class="highlight">"<%= workspaceName %>"</span>.</p>
+    <p><span class="highlight"><%= inviterName %></span> has mentioned you in comment on the task <span class="highlight">"<%= taskName %>"</span>.</p>
 
-    <p>Click the button below to get started:</p>
+    <p><span class="highlight"><%= comment %></p>
 
-    <div class="btn-container">
-      <a href="<%= link %>" class="btn" target="_blank">Join Board</a>
-    </div>
-
-    <p>If you don't have an account, you can register here:</p>
+    <p>Click the button below to see details:</p>
 
     <div class="btn-container">
-      <a href="<%= registerLink %>" class="secondary-link" target="_blank">Register Now</a>
+      <a href="<%= link %>" class="btn" target="_blank">View Task</a>
     </div>
-
-    <p>If you weren't expecting this invitation, you can ignore this email.</p>
 
     <div class="footer">
       &copy; <%= new Date().getFullYear() %> BaseTeam. All rights reserved.

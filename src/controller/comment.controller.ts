@@ -14,6 +14,9 @@ import { TaskMemberModel } from '../model/taskMember.model';
 import { NotificationModel } from '../model/notification.model';
 import { convertObjectId } from '../config/app.config';
 import { emitToUser } from '../utils/socket';
+import ejs from 'ejs';
+import { sendEmail } from '../utils/sendEmail';
+import User from '../model/user.model';
 
 export const addCommentHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -21,7 +24,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     // @ts-expect-error
     const user = req?.user;
     const attachments = req.files as Express.Multer.File[];
-    const { comment, task_id } = req.body;
+    const { comment, task_id, member } = req.body;
     const taskExist = await TaskModel.findOne({ _id: task_id });
 
     if (!taskExist) {
@@ -42,14 +45,14 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       }));
     }
 
-    const newComment = await CommentModel.create({
+    const newComment: any = await CommentModel.create({
       comment,
       task_id,
       attachment: attachmentsData,
-      commented_by: user._id,
+      commented_by: user,
     });
 
-    const comments = await CommentModel.findOne({ _id: newComment._id })
+    const comments: any = await CommentModel.findOne({ _id: newComment._id })
       .populate({
         path: 'task_id',
         select: '_id title description board_id status_list_id position position',
@@ -60,19 +63,47 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       });
 
     const { io } = getSocket();
+    if (io)
+      io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
+        data: newComment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({
           message: `New commend has been added by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'receive_new_comment', { data: newComment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
 
+    const mentionedMembersData: any = await Promise.all(
+      (Array.isArray(member) ? member : [member]).map(async (m: string) => {
+        return await User.findOne({ _id: m });
+      })
+    );
+    const validMentionedMembers = mentionedMembersData.filter(Boolean);
+    const taskUrl = `${process.env.BOARD_FE_URL}/board/${comments.task_id.board_id}?task_id=${comments.task_id._id}`;
+    const templatePath = __dirname + '/../helper/email-templates/mention-member.ejs';
+    for (const validMember of validMentionedMembers) {
+      const html = await ejs.renderFile(templatePath, {
+        inviterName: `${user.first_name} ${user.last_name}`,
+        inviteeName: `${validMember.first_name} ${validMember.last_name}`,
+        taskName: comments.task_id.title,
+        comment,
+        link: taskUrl,
+      });
+
+      const mailOptions = {
+        to: validMember.email,
+        subject: 'You were mentioned in a comment',
+        html,
+      };
+
+      await sendEmail(mailOptions);
+    }
     APIResponse(res, true, HttpStatusCode.CREATED, 'Comment successfully added', comments);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
@@ -124,18 +155,32 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
       });
     }
     const taskLabel = await CommentModel.findByIdAndDelete({ _id: id }, { session });
+    const updatedComment: any = await CommentModel.findById(id)
+      .lean()
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'commented_by',
+        select: '_id first_name middle_name last_name email profile_image status',
+      });
 
     await session.commitTransaction();
     session.endSession();
 
     const { io } = getSocket();
+    if (io)
+      io.to(updatedComment?.task_id?.board_id?.toString() ?? '').emit('remove_comment', {
+        data: taskLabel,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({
           message: `Comment has been removed from task`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -156,7 +201,7 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
     await validateRequest(req.body, updateCommentSchema);
 
     const { id } = req.params;
-    const { comment } = req.body;
+    const { comment, member } = req.body;
     const newFiles = req.files as Express.Multer.File[];
     // @ts-expect-error
     const user = req?.user;
@@ -243,7 +288,7 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
       );
     }
 
-    const updatedComment = await CommentModel.findById(id)
+    const updatedComment: any = await CommentModel.findById(id)
       .lean()
       .populate({
         path: 'task_id',
@@ -260,17 +305,46 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
     }
 
     const { io } = getSocket();
+    if (io)
+      io.to(updatedComment?.task_id?.board_id?.toString() ?? '').emit('receive_updated_comment', {
+        data: updatedComment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({
-          message: `New commend has been updated by "${user.first_name} ${user.last_name}"`,
+          message: `New comment has been updated by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'receive_updated_comment', { data: updatedComment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
+    }
+
+    const mentionedMembersData: any = await Promise.all(
+      (Array.isArray(member) ? member : [member]).map(async (m: string) => {
+        return await User.findOne({ _id: m });
+      })
+    );
+    const validMentionedMembers = mentionedMembersData.filter(Boolean);
+    const taskUrl = `${process.env.BOARD_FE_URL}/board/${updatedComment.task_id.board_id}?task_id=${updatedComment.task_id._id}`;
+    const templatePath = __dirname + '/../helper/email-templates/mention-member.ejs';
+    for (const validMember of validMentionedMembers) {
+      const html = await ejs.renderFile(templatePath, {
+        inviterName: `${user.first_name} ${user.last_name}`,
+        inviteeName: `${validMember.first_name} ${validMember.last_name}`,
+        taskName: updatedComment.task_id.title,
+        comment,
+        link: taskUrl,
+      });
+
+      const mailOptions = {
+        to: validMember.email,
+        subject: 'You were mentioned in a comment',
+        html,
+      };
+
+      await sendEmail(mailOptions);
     }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Comment successfully updated', updatedComment);

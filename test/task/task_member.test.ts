@@ -151,7 +151,7 @@ describe('Task Member Management API', function () {
                 first_name: 'Suraj',
                 middle_name: 'C',
                 last_name: 'Rathod',
-                email: 'suraj.tatvasoft@gmail.com',
+                email: 'suraj@gmail.com',
               },
               createdAt: '2025-04-15T06:00:02.226Z',
               updatedAt: '2025-04-15T06:00:02.226Z',

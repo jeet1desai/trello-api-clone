@@ -8,11 +8,9 @@ const userSchema = new mongoose.Schema(
     },
     middle_name: {
       type: String,
-      required: [true, 'Please provide a middlename'],
     },
     last_name: {
       type: String,
-      required: [true, 'Please provide a lastname'],
     },
     email: {
       type: String,
@@ -21,8 +19,6 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, 'Please provide a password'],
-      unique: true,
     },
     profile_image: {
       imageName: { type: String, required: false },

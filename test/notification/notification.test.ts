@@ -33,7 +33,7 @@ describe('Notification API', () => {
           action: 'INVITE_ACCEPTED',
           read: true,
           receiver: mockUser._id,
-          sender: { first_name: 'Bob', last_name: 'Johnson', email: 'bob@example.com' },
+          sender: { first_name: 'Bob', last_name: 'Johnson', email: 'bob@example.com', _id: '' },
           createdAt: new Date(),
         },
       ]);
