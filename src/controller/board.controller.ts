@@ -13,7 +13,7 @@ import User from '../model/user.model';
 import { BoardInviteModel } from '../model/boardInvite.model';
 import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { NotificationModel } from '../model/notification.model';
 import { emitToUser } from '../utils/socket';
 import { saveRecentActivity } from '../helper/recentActivityService';
@@ -359,7 +359,7 @@ export const getBoardController = async (req: express.Request, res: express.Resp
       return;
     }
 
-    if(board?.members?.map((member: { memberId: any; }) => member.memberId.toString()).includes(user._id?.toString())) {
+    if (board?.members?.map((member: { memberId: any }) => member.memberId.toString()).includes(user._id?.toString())) {
       APIResponse(res, true, HttpStatusCode.OK, 'Board successfully fetched', board);
     } else {
       APIResponse(res, true, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to view this board');

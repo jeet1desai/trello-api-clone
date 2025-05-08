@@ -416,7 +416,7 @@ export const getUserDataFromToken = async (idToken: string, screenName?: string)
 
   const provider = firebase?.sign_in_provider;
   const userRecord = await admin.auth().getUser(uid);
-  const firstName = provider === 'github.com' ? screenName || userRecord.displayName || '' : userRecord.displayName || '';
+  const firstName = provider === 'github.com' ? screenName ?? userRecord.displayName ?? '' : userRecord.displayName ?? '';
   return {
     first_name: firstName,
     email,
