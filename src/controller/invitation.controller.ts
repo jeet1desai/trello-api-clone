@@ -164,6 +164,8 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
 
     let skippedEmails: string[] = [];
 
+    let memberEmails: string[] = [];
+
     if (members && members.length > 0) {
       const invitePromises = members
         .filter((email: string) => email !== user.email)
@@ -178,7 +180,10 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
               })
             : false;
 
-          if (isAlreadyMember) return;
+          if (isAlreadyMember) {
+            memberEmails.push(email);
+            return;
+          }
 
           const existingInvite = await BoardInviteModel.findOne({
             email,
@@ -252,11 +257,20 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
 
       await Promise.all(invitePromises);
     }
+    let message = '';
 
-    let message = invitedBy.role === 'ADMIN' ? 'Invitations were successfully sent.' : 'Your invitations have been sent to the admin for approval.';
+    const successfulInvites = members.length - skippedEmails.length - memberEmails.length;
+
+    if (successfulInvites > 0) {
+      message += invitedBy.role === 'ADMIN' ? 'Invitations were successfully sent. ' : 'Your invitations have been sent to the admin for approval. ';
+    }
 
     if (skippedEmails.length > 0) {
-      message += ` The following users are already in the board or already invited: ${skippedEmails.join(', ')}.`;
+      message += `The following users are already invited: ${skippedEmails.join(', ')}. `;
+    }
+
+    if (memberEmails.length > 0) {
+      message += `The following users are already in the board: ${memberEmails.join(', ')}.`;
     }
 
     APIResponse(res, true, HttpStatusCode.OK, message, req.body);
@@ -445,8 +459,7 @@ export const getInvitationListController = async (req: express.Request, res: exp
 };
 
 export const updateInvitationStatusController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const { inviteId } = req.params;
-  const { status } = req.body;
+  const { status, inviteId } = req.body;
 
   if (!Object.values(MEMBER_INVITE_STATUS).includes(status)) {
     APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid status');
@@ -460,7 +473,6 @@ export const updateInvitationStatusController = async (req: express.Request, res
     const invitation = await BoardInviteModel.findById(inviteId);
 
     const board = await BoardModel.findById(invitation?.boardId);
-
     if (!board) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
       return;
@@ -479,7 +491,9 @@ export const updateInvitationStatusController = async (req: express.Request, res
     let notificationMessage = '';
     let updatedInvitation;
 
-    if (status === MEMBER_INVITE_STATUS.ADMIN_APPROVED) {
+    if (invitation.status === MEMBER_INVITE_STATUS.ADMIN_APPROVED) {
+      APIResponse(res, true, HttpStatusCode.CONFLICT, 'This Invitation is already Approved by Admin');
+    } else if (status === MEMBER_INVITE_STATUS.ADMIN_APPROVED) {
       const existingUser = await User.findOne({ email: invitation.email });
       notificationMessage = 'The invitation has been approved by the admin. and send to mail user';
       updatedInvitation = await handleAdminApproval(invitation, status);
@@ -507,7 +521,7 @@ export const updateInvitationStatusController = async (req: express.Request, res
       message: notificationMessage,
       action: 'invitation',
       receiver: invitation.invitedBy,
-      sender: invitation.email,
+      sender: user._id,
     });
     APIResponse(res, true, HttpStatusCode.OK, notificationMessage, updatedInvitation);
   } catch (error) {

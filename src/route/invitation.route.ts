@@ -16,6 +16,6 @@ router.put('/update-invitation/:id', updateInvitationDetailController);
 router.post('/send-invitation/:id', sendInvitationDetailController);
 
 router.get('/admin-invite-details', getInvitationListController);
-router.patch('/admin-update-invite-status/:inviteId', updateInvitationStatusController);
+router.patch('/admin-update-invite-status', updateInvitationStatusController);
 
 export default router;
