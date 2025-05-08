@@ -326,7 +326,10 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
     let updatedtData1;
     if (updated) {
       await movingTask.save({ validateModifiedOnly: true });
-      updatedtData1 = await TaskModel.findById(movingTask._id);
+      updatedtData1 = await TaskModel.findById(movingTask._id).populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
+      });
     }
 
     const { io } = getSocket();
