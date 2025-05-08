@@ -5,7 +5,7 @@ import { HttpStatusCode } from '../helper/enum';
 import { BoardInviteModel, BoardInviteModelType } from '../model/boardInvite.model';
 import { validateRequest } from '../utils/validation.utils';
 import { sendInvitationSchema, updateInvitationSchema } from '../schemas/board.schema';
-import { getSortOption, MEMBER_INVITE_STATUS, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
+import { MEMBER_INVITE_STATUS, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
 import User from '../model/user.model';
 import { MemberModel } from '../model/members.model';
 import { BoardModel } from '../model/board.model';
@@ -16,7 +16,13 @@ import { getSocket } from '../config/socketio.config';
 import { emitToUser } from '../utils/socket';
 import { saveRecentActivity } from '../helper/recentActivityService';
 import { getPagination } from '../utils/pagination';
-import { Document, FilterQuery, Schema } from 'mongoose';
+import { Document, Schema, Types } from 'mongoose';
+
+interface UserInfo {
+  email: string;
+  first_name: string;
+  last_name: string;
+}
 
 export const getInvitationDetailController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -290,25 +296,14 @@ export const getInvitationListController = async (req: express.Request, res: exp
 
     const { page = '1', perPage = '10', search = '', sortType = SORT_TYPE.CreatedDateDesc, status = 'ALL' } = req.query || {};
 
-    const parsedPage = Number(page) || 1;
-    const parsedLimit = Number(perPage) || 10;
-
     const {
       skip,
       limit,
       page: currentPage,
     } = getPagination({
-      page: parsedPage,
-      limit: parsedLimit,
+      page: page,
+      limit: perPage,
     });
-
-    const sortOption = getSortOption(parseInt(sortType as string) || SORT_TYPE.CreatedDateDesc);
-
-    // Build match filter dynamically
-    const matchFilter: FilterQuery<BoardInviteModelType> = {
-      'board.createdBy': user._id,
-      invitedBy: { $ne: user._id },
-    };
 
     const statusMap: Record<string, string[]> = {
       ALL: ['ADMIN_PENDING', 'ADMIN_APPROVED', 'ADMIN_REJECTED'],
@@ -317,137 +312,73 @@ export const getInvitationListController = async (req: express.Request, res: exp
       REJECTED: ['ADMIN_REJECTED'],
     };
 
-    const filterStatuses = statusMap[status.toString().toUpperCase()];
-    if (!filterStatuses) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid status filter');
-      return;
-    }
-    matchFilter.status = { $in: filterStatuses };
+    const boards = await BoardModel.find({ createdBy: user._id });
+    const boardIds = boards.map((board) => board._id);
 
-    // Optional search filter on email
-    if (search) {
-      matchFilter.email = { $regex: search.toString(), $options: 'i' };
-    }
+    const query = {
+      boardId: { $in: boardIds },
+      status: { $in: statusMap[status.toString().toUpperCase()] },
+    };
 
-    // Aggregation pipeline
-    const basePipeline = [
-      // Lookup board data
-      {
-        $lookup: {
-          from: 'boards',
-          localField: 'boardId',
-          foreignField: '_id',
-          as: 'board',
-        },
+    const [adminInvitesRaw, total] = await Promise.all([
+      BoardInviteModel.find(query)
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: 'boardId',
+          select: '_id name createdBy',
+        })
+        .populate({
+          path: 'invitedBy',
+          select: '_id email profilePicture createdBy first_name last_name',
+        })
+        .lean(), // Important for plain objects
+      BoardInviteModel.countDocuments(query),
+    ]);
+
+    // Extract emails from invites
+    const emails = adminInvitesRaw.map((invite) => invite.email);
+
+    // Fetch user details by email
+    const users: any = await User.find({ email: { $in: emails } })
+      .select('email first_name last_name')
+      .lean();
+
+    // Build email-to-user map
+    const userMap: Record<string, UserInfo> = users.reduce(
+      (acc: any, user: any) => {
+        acc[user.email] = user;
+        return acc;
       },
-      { $unwind: '$board' },
+      {} as Record<string, UserInfo>
+    );
 
-      // Match filtered results
-      { $match: matchFilter },
+    // Final admin invites with `invitees`
+    const adminInvites = adminInvitesRaw.map((invite: any) => {
+      const user = userMap[invite.email];
 
-      // Lookup user details using invitee's email
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'email',
-          foreignField: 'email',
-          as: 'inviteeUser',
-        },
-      },
-
-      // Lookup the inviter user by ID
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'invitedBy',
-          foreignField: '_id',
-          as: 'invitedByUser',
-        },
-      },
-      { $unwind: { path: '$invitedByUser', preserveNullAndEmptyArrays: true } },
-      // Add invitee object with fallback name
-      {
-        $addFields: {
-          invitee: {
-            email: '$email',
-            fullName: {
-              $cond: [
-                { $gt: [{ $size: '$inviteeUser' }, 0] },
-                {
-                  $concat: [
-                    { $ifNull: [{ $arrayElemAt: ['$inviteeUser.first_name', 0] }, ''] },
-                    ' ',
-                    { $ifNull: [{ $arrayElemAt: ['$inviteeUser.last_name', 0] }, ''] },
-                  ],
-                },
-                'Not Getting User',
-              ],
+      return {
+        ...invite,
+        invitees: user
+          ? {
+              email: user.email,
+              fullName: `${user.first_name} ${user.last_name}`,
+            }
+          : {
+              email: invite.email,
+              fullName: 'No User Found',
             },
-          },
-          invitedBy: {
-            _id: '$invitedByUser._id',
-            email: '$invitedByUser.email',
-            profilePicture: '$invitedByUser.profilePicture',
-            fullName: {
-              $concat: ['$invitedByUser.first_name', ' ', '$invitedByUser.last_name'],
-            },
-          },
-        },
-      },
-    ];
+      };
+    });
 
-    const sortPipeline = Object.keys(sortOption).length ? [{ $sort: sortOption }] : [];
-
-    const paginatedPipeline = [
-      ...basePipeline,
-      ...sortPipeline,
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $addFields: {
-          statusLabel: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$status', 'ADMIN_PENDING'] }, then: 'Pending' },
-                { case: { $eq: ['$status', 'ADMIN_APPROVED'] }, then: 'Approved' },
-                { case: { $eq: ['$status', 'ADMIN_REJECTED'] }, then: 'Rejected' },
-              ],
-              default: 'Unknown',
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          'board._id': 1,
-          'board.name': 1,
-          'board.createdBy': 1,
-          email: 1,
-          statusLabel: 1,
-          status: 1,
-          role: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          workspaceId: 1,
-          invitee: 1,
-          invitedBy: 1,
-        },
-      },
-    ];
-
-    const invites = await BoardInviteModel.aggregate(paginatedPipeline);
-
-    // Count total records
-    const countPipeline = [...basePipeline, { $count: 'total' }];
-    const countResult = await BoardInviteModel.aggregate(countPipeline);
-    const totalRecords = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(total / limit);
 
     APIResponse(res, true, HttpStatusCode.OK, 'Invitations successfully fetched', {
-      invites: invites,
+      data: adminInvites,
       pagination: {
         currentPage,
-        totalPages: Math.ceil(totalRecords / limit),
-        totalRecords,
+        totalPages: totalPages,
+        totalRecords: total,
         limit,
       },
     });
