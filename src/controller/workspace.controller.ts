@@ -161,8 +161,10 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
       ],
     };
 
-    if (search) {
-      filters.name = { $regex: search, $options: 'i' };
+    const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special chars
+    const safeSearch = escapeRegex(search as string);
+    if (safeSearch) {
+      filters.name = { $regex: safeSearch, $options: 'i' };
     }
 
     // 3. Get total count (for pagination metadata) and fetch workspaces
@@ -174,16 +176,13 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
     // 4. Get board counts for each workspace
     const workspacesWithBoardCount = await Promise.all(
       workspaces.map(async (workspace) => {
-        const boards = await BoardModel.aggregate([
-          ...getWorkspaceBoardsQuery(workspace._id.toString(), user._id.toString()),
-          { $count: 'total' }
-        ]);
-        
+        const boards = await BoardModel.aggregate([...getWorkspaceBoardsQuery(workspace._id.toString(), user._id.toString()), { $count: 'total' }]);
+
         const count = boards.length > 0 ? boards[0].total : 0;
-        
+
         return {
           ...workspace.toObject(),
-          boards: count
+          boards: count,
         };
       })
     );

@@ -604,6 +604,8 @@ export const getBoardsController = async (req: express.Request, res: express.Res
 };
 
 const getBoardListQuery = (userId: string, search: string, sortOption: Record<string, 1 | -1>): PipelineStage[] => {
+  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special chars
+  const safeSearch = escapeRegex(search);
   const pipeline: PipelineStage[] = [
     // Find boards where the user is a member or admin
     {
@@ -658,7 +660,7 @@ const getBoardListQuery = (userId: string, search: string, sortOption: Record<st
       ? [
           {
             $match: {
-              $or: [{ name: { $regex: search, $options: 'i' } }],
+              $or: [{ name: { $regex: safeSearch, $options: 'i' } }],
             },
           },
         ]
