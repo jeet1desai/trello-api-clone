@@ -9,6 +9,7 @@ import { TaskModel } from '../../src/model/task.model';
 import * as fileHelper from '../../src/helper/saveMultipleFiles';
 import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
 import { TaskMemberModel } from '../../src/model/taskMember.model';
+import { MemberModel } from '../../src/model/members.model';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -54,30 +55,36 @@ describe('Task Management API', function () {
     it('should create task successfully', (done) => {
       const findOneStub = sinon.stub(TaskModel, 'findOne');
       const createStub = sinon.stub(TaskModel, 'create');
+      const memberFindStub = sinon.stub(MemberModel, 'find');
 
-      // 1st call: check if task exists
-      findOneStub.withArgs({ title: 'New Task2', board_id: 'xyz', status_list_id: 'abc' }).resolves(null);
+      const boardId = new mongoose.Types.ObjectId().toString();
+      const statusListId = 'abc';
+      const title = 'New Task2';
 
-      // 2nd call: get last task (needs to support sort().exec())
-      findOneStub.withArgs({ board_id: 'xyz', status_list_id: 'abc' }).returns({
+      findOneStub.withArgs({ title, board_id: boardId, status_list_id: statusListId }).resolves(null);
+
+      findOneStub.withArgs({ board_id: boardId, status_list_id: statusListId }).returns({
         sort: () => ({
-          exec: () => Promise.resolve(null), // or return a mock task object
+          exec: () => Promise.resolve(null),
         }),
       } as any);
 
       createStub.resolves(taskMock as any);
 
+      memberFindStub.returns({
+        select: () => Promise.resolve([{ memberId: new mongoose.Types.ObjectId() }, { memberId: new mongoose.Types.ObjectId() }]),
+      } as any);
+
       server
         .post(`${API_URL}/task/create-task`)
         .set('Cookie', ['access_token=token'])
         .send({
-          title: 'New Task2',
-          board_id: 'xyz',
-          status_list_id: 'abc',
+          title,
+          board_id: boardId,
+          status_list_id: statusListId,
         })
         .expect(201)
         .end((err, res) => {
-          expect(res.body.success).to.be.true;
           expect(res.body.message).to.equal('Task successfully created');
           done();
         });

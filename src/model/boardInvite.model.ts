@@ -9,6 +9,7 @@ export interface BoardInviteModelType {
   workspaceId: mongoose.Schema.Types.ObjectId;
   status?: MEMBER_INVITE_STATUS;
   role?: MEMBER_ROLES;
+  is_approved_by_admin?: Boolean;
 }
 
 const schema = new mongoose.Schema<BoardInviteModelType>(
@@ -34,6 +35,10 @@ const schema = new mongoose.Schema<BoardInviteModelType>(
       upperCase: true,
       default: MEMBER_INVITE_STATUS.PENDING,
       enum: MEMBER_INVITE_STATUS,
+    },
+    is_approved_by_admin: {
+      type: Boolean,
+      default: false,
     },
     role: {
       type: String,
