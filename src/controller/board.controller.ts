@@ -94,6 +94,7 @@ export const createBoardController = async (req: express.Request, res: express.R
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
             sender: user,
+            link: `/board/${board._id.toString()}`,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -199,6 +200,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
             sender: user,
+            link: `/board/${board._id.toString()}`,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -214,6 +216,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
             sender: user,
+            link: `/board/${board._id.toString()}`,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -239,6 +242,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
             sender: user,
+            link: `/board/${board._id.toString()}`,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });

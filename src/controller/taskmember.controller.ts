@@ -56,10 +56,11 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       });
     if (memberDetails._id.toString()) {
       const notification = await NotificationModel.create({
-        message: `Welcome, You added as a member in this task`,
+        message: `Welcome, You added as a member in task "${taskExist.title}"`,
         action: 'invited',
         receiver: convertObjectId(memberDetails._id.toString()),
         sender: user,
+        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
       });
 
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
@@ -134,10 +135,11 @@ export const assignTaskMemberHandler = async (req: Request, res: Response, next:
 
     if (memberDetails._id.toString()) {
       const notification = await NotificationModel.create({
-        message: `You have been assigned to this task`,
+        message: `You have been assigned to task "${taskExist.title}"`,
         action: 'assigned',
         receiver: convertObjectId(memberDetails._id.toString()),
         sender: user,
+        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
       });
 
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
@@ -203,7 +205,7 @@ export const unassignTaskMemberHandler = async (req: Request, res: Response, nex
 
     if (memberDetails && memberDetails._id.toString()) {
       const notification = await NotificationModel.create({
-        message: `You have been unassigned from this task`,
+        message: `You have been unassigned from task "${taskExist.title}"`,
         action: 'unassigned',
         receiver: convertObjectId(memberDetails._id.toString()),
         sender: user,
@@ -260,7 +262,7 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task member not found..!');
       return;
     }
-    const taskExist = await TaskModel.findOne({ _id: taskId });
+    const taskExist: any = await TaskModel.findOne({ _id: taskId });
 
     const taskMembers: any = await TaskMemberModel.findOne({ _id: memberId })
       .populate({
@@ -282,7 +284,7 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       });
     if (taskMemberExist?.member_id.toString()) {
       const notification = await NotificationModel.create({
-        message: `You removed as a member from this task`,
+        message: `You removed as a member from task "${taskExist.title}"`,
         action: 'invited',
         receiver: convertObjectId(taskMemberExist?.member_id.toString()),
         sender: user,
