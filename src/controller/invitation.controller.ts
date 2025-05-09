@@ -57,14 +57,16 @@ export const updateInvitationDetailController = async (req: express.Request, res
     const { id } = req.params;
     const { status } = req.body;
 
-    const invitation = await BoardInviteModel.findOne({ _id: id, status: MEMBER_INVITE_STATUS.PENDING });
-
+    const invitation = await BoardInviteModel.findOne({
+      _id: id,
+      status: { $in: [MEMBER_INVITE_STATUS.PENDING, MEMBER_INVITE_STATUS.ADMIN_APPROVED] },
+    });
     if (!invitation) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Invitation not found');
       return;
     }
 
-    const existingUser = await User.findOne({ email: invitation.email });
+    const existingUser = await User.findOne({ email: invitation.email, status: true });
     if (!existingUser) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'User not found for the given invitation');
       return;
@@ -247,6 +249,7 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
             invitedBy: user._id,
             workspaceId: workspace._id,
             status: isAdmin ? MEMBER_INVITE_STATUS.PENDING : MEMBER_INVITE_STATUS.ADMIN_PENDING,
+            is_approved_by_admin: isAdmin ? false : true,
           });
 
           if (isAdmin) {
@@ -294,7 +297,7 @@ export const getInvitationListController = async (req: express.Request, res: exp
     // @ts-expect-error
     const user = req.user;
 
-    const { page = '1', perPage = '10', search = '', sortType = SORT_TYPE.CreatedDateDesc, status = 'ALL' } = req.query || {};
+    const { page = '1', perPage = '10', search = '', sortType = SORT_TYPE.CreatedDateDesc, status = 'ALL', boardId } = req.query || {};
 
     const {
       skip,
@@ -306,7 +309,7 @@ export const getInvitationListController = async (req: express.Request, res: exp
     });
 
     const statusMap: Record<string, string[]> = {
-      ALL: ['ADMIN_PENDING', 'ADMIN_APPROVED', 'ADMIN_REJECTED'],
+      ALL: ['ADMIN_PENDING', 'ADMIN_APPROVED', 'ADMIN_REJECTED', 'COMPLETED'],
       APPROVED: ['ADMIN_APPROVED'],
       PENDING: ['ADMIN_PENDING'],
       REJECTED: ['ADMIN_REJECTED'],
@@ -315,11 +318,15 @@ export const getInvitationListController = async (req: express.Request, res: exp
     const boards = await BoardModel.find({ createdBy: user._id });
     const boardIds = boards.map((board) => board._id);
 
-    const query = {
+    const query: any = {
       boardId: { $in: boardIds },
       status: { $in: statusMap[status.toString().toUpperCase()] },
+      is_approved_by_admin: true,
     };
 
+    if (boardId) {
+      query.boardId = boardId;
+    }
     const [adminInvitesRaw, total] = await Promise.all([
       BoardInviteModel.find(query)
         .skip(skip)
