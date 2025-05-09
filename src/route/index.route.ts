@@ -14,10 +14,30 @@ import notificationRouter from './notification.route';
 import commentRouter from './comment.route';
 import dashboardRouter from './dashboard.route';
 import contactUsRouter from './contactUs.route';
-
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 const BASE_PATH = '/v1/api';
 
 export default (app: Application) => {
+  const swaggerOptions = {
+    definition: {
+      openapi: '3.0.0',
+      info: {
+        title: 'API Docs',
+        version: '1.0.0',
+      },
+      servers: [
+        {
+          url: 'http://localhost:3000/v1/api',
+        },
+      ],
+    },
+    apis: ['./src/routes/*.ts'], // adjust path as needed
+  };
+
+  const swaggerSpec = swaggerJsdoc(swaggerOptions);
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
   const routes = () => {
     app.use(`${BASE_PATH}/auth`, authRouter);
     app.use(`${BASE_PATH}/workspace`, workspaceRouter);

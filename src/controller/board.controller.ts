@@ -543,7 +543,7 @@ export const sendBoardInviteEmail = async ({
     inviterName: `${user.first_name} ${user.last_name}`,
     boardName: board.name,
     workspaceName: workspace.name,
-    link: `${process.env.BOARD_FE_URL}/invitation/${inviteId}/${existingUser._id}`,
+    link: `${process.env.BOARD_FE_URL}/invitation/${inviteId}/${existingUser?._id}`,
     registerLink: `${process.env.BOARD_FE_URL}/register`,
   });
 

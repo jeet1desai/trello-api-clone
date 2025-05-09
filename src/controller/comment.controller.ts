@@ -64,21 +64,20 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
 
     const { io } = getSocket();
     if (io)
-      io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
-        data: newComment,
-      });
-    if (taskMembers.length > 0) {
-      taskMembers.forEach(async (member: any) => {
-        const notification = await NotificationModel.create({
-          message: `New comment has been added by "${user.first_name} ${user.last_name}"`,
-          action: 'invited',
-          receiver: convertObjectId(member.member_id.toString()),
-          sender: user,
-          link: `/board/${taskExist.board_id.toString()}?task_id=${taskExist._id.toString()}`,
+      if (taskMembers.length > 0) {
+        // io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
+        //   data: newComment,
+        // });
+        taskMembers.forEach(async (member: any) => {
+          const notification = await NotificationModel.create({
+            message: `New commend has been added by "${user.first_name} ${user.last_name}"`,
+            action: 'invited',
+            receiver: convertObjectId(member.member_id.toString()),
+            sender: user,
+          });
+          emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
         });
-        emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
-      });
-    }
+      }
 
     const mentionedMembersData: any = await Promise.all(
       (Array.isArray(member) ? member : [member]).map(async (m: string) => {
@@ -86,13 +85,13 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
       })
     );
     const validMentionedMembers = mentionedMembersData.filter(Boolean);
-    const taskUrl = `${process.env.BOARD_FE_URL}/board/${comments.task_id.board_id}?task_id=${comments.task_id._id}`;
+    const taskUrl = `${process.env.BOARD_FE_URL}/board/${comments?.task_id.board_id}?task_id=${comments?.task_id._id}`;
     const templatePath = __dirname + '/../helper/email-templates/mention-member.ejs';
     for (const validMember of validMentionedMembers) {
       const html = await ejs.renderFile(templatePath, {
         inviterName: `${user.first_name} ${user.last_name}`,
         inviteeName: `${validMember.first_name} ${validMember.last_name}`,
-        taskName: comments.task_id.title,
+        taskName: comments?.task_id.title,
         comment,
         link: taskUrl,
       });
@@ -164,9 +163,9 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
         await deleteFromCloudinary(item.imageId);
       });
     }
+
     const taskLabel = await CommentModel.findByIdAndDelete({ _id: id }, { session });
     const updatedComment: any = await CommentModel.findById(id)
-      .lean()
       .populate({
         path: 'task_id',
         select: '_id title description board_id status_list_id position position',
@@ -174,7 +173,8 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
       .populate({
         path: 'commented_by',
         select: '_id first_name middle_name last_name email profile_image status',
-      });
+      })
+      .lean();
 
     await session.commitTransaction();
     session.endSession();

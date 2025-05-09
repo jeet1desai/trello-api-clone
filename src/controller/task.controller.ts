@@ -64,11 +64,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
   } catch (err) {
-    if (err instanceof Joi.ValidationError) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else if (err instanceof Error) {
-      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
-    }
+    return next(err);
   }
 };
 

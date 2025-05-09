@@ -14,6 +14,8 @@ export const validateRequest = async <T>(data: T, schema: AnySchema): Promise<T>
         const field = detail.path.join('.');
         errors[field] = detail.message;
       }
+      console.log('error?>>>>>>>>>>>>>', errors);
+
       throw new ValidationError(errors);
     }
     throw error;

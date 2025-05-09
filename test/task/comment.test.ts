@@ -11,6 +11,7 @@ import * as utils from '../../src/helper/saveMultipleFiles';
 import * as fileUpload from '../../src/utils/cloudinaryFileUpload';
 import { TaskMemberModel } from '../../src/model/taskMember.model';
 import * as socketUtils from '../../src/utils/socket';
+import { NotificationModel } from '../../src/model/notification.model';
 
 const mockUser = {
   _id: new mongoose.Types.ObjectId().toString(),
@@ -110,7 +111,7 @@ describe('Comment Management API', function () {
         .expect(400)
         .end((err, res) => {
           expect(res.body.success).to.be.false;
-          expect(res.body.message).to.equal('Task id is required');
+          expect(res.body.message).to.equal('Validation Failed');
           done();
         });
     });
@@ -295,38 +296,73 @@ describe('Comment Management API', function () {
   describe('DELETE /comment/delete/:id', () => {
     it('should delete a task comment by ID', async () => {
       const commentId = 'tm1';
+      const fakeTaskId: any = new mongoose.Types.ObjectId();
+      const fakeBoardId = new mongoose.Types.ObjectId();
+      const fakeUser = { _id: new mongoose.Types.ObjectId() };
+      const fakeMemberId = new mongoose.Types.ObjectId();
 
+      const commentDoc = {
+        _id: commentId,
+        task_id: fakeTaskId,
+        attachment: [{ imageId: 'image1' }, { imageId: 'image2' }],
+        commented_by: fakeUser._id,
+      };
+
+      // Stub CommentModel.findOne
       sinon
         .stub(CommentModel, 'findOne')
         .withArgs({ _id: commentId })
-        .resolves({
+        .resolves(commentDoc as any);
+
+      // Stub TaskMemberModel.find
+      sinon
+        .stub(TaskMemberModel, 'find')
+        // .withArgs({ task_id: fakeTaskId })
+        .resolves([{ member_id: fakeMemberId }] as any);
+
+      // Stub deleteFromCloudinary
+      sinon.stub(fileUpload, 'deleteFromCloudinary').resolves({ result: 'ok' } as any);
+
+      // Stub findByIdAndDelete with session
+      sinon
+        .stub(CommentModel, 'findByIdAndDelete')
+        .withArgs({ _id: commentId }, sinon.match.any)
+        .resolves(commentDoc as any);
+
+      // Stub findById().populate().populate().lean()
+      const populateStub = {
+        populate: sinon.stub().returnsThis(),
+        lean: sinon.stub().resolves({
           _id: commentId,
-          attachment: [{ imageId: 'image1' }, { imageId: 'image2' }],
-        });
+          task_id: {
+            _id: fakeTaskId,
+            board_id: fakeBoardId,
+          },
+        }),
+      };
+      sinon
+        .stub(CommentModel, 'findById')
+        .withArgs(commentId)
+        .returns(populateStub as any);
 
-      const fakeMemberId = new mongoose.Types.ObjectId().toString();
+      // Stub NotificationModel.create
+      sinon.stub(NotificationModel, 'create').resolves({ _id: 'notif-id', message: 'Comment has been removed' } as any);
 
-      sinon.stub(TaskMemberModel, 'find').resolves([{ member_id: fakeMemberId }]);
+      // Stub socket
+      sinon.stub(getSocket(), 'io').value({
+        to: () => ({ emit: sinon.stub() }),
+      });
 
+      // Stub startSession
       const sessionStub: any = {
         startTransaction: sinon.stub(),
         commitTransaction: sinon.stub(),
         abortTransaction: sinon.stub(),
         endSession: sinon.stub(),
       };
-
       sinon.stub(mongoose, 'startSession').resolves(sessionStub);
 
-      sinon
-        .stub(CommentModel, 'findByIdAndDelete')
-        .withArgs({ _id: commentId })
-        .resolves({
-          _id: commentId,
-          attachment: [{ imageId: 'image1' }, { imageId: 'image2' }],
-        });
-
-      sinon.stub(fileUpload, 'deleteFromCloudinary').resolves({ result: 'ok' } as any);
-
+      // Perform the request
       await server
         .delete(`${API_URL}/comment/delete/${commentId}`)
         .set('Cookie', ['access_token=fake-jwt-token'])
@@ -335,12 +371,12 @@ describe('Comment Management API', function () {
           expect(res.body.message).to.equal('Comment successfully removed');
         });
 
-      // Assertions to ensure the correct flow occurred
       sinon.assert.calledOnce(sessionStub.startTransaction);
       sinon.assert.calledOnce(sessionStub.commitTransaction);
       sinon.assert.calledOnce(sessionStub.endSession);
       sinon.restore();
     });
+
     it('should return 400 if task not found', (done) => {
       const findOneStub = sinon.stub(CommentModel, 'findOne').resolves(null);
       const startSessionStub = sinon.stub(mongoose, 'startSession').resolves({
