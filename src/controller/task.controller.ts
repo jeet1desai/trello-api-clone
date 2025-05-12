@@ -143,20 +143,18 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     // 4. Enhance task details
     const taskList = await Promise.all(
       tasks.map(async (task) => {
-        const [taskLabels, commentCount, memberCount] = await Promise.all([
+        const [taskLabels, commentCount] = await Promise.all([
           TaskLabelModel.find({ task_id: task._id }).populate({
             path: 'label_id',
             select: '_id name backgroundColor textColor boardId',
           }),
           CommentModel.countDocuments({ task_id: task._id }),
-          TaskMemberModel.countDocuments({ task_id: task._id }),
         ]);
 
         return {
           ...task.toObject(),
           labels: taskLabels.map((tl) => tl.label_id),
           comments: commentCount,
-          members: memberCount,
         };
       })
     );
