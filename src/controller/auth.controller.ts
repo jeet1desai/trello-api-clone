@@ -22,6 +22,21 @@ import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 import { saveFileToCloud } from '../utils/cloudinaryFileUpload';
 import admin from '../config/firebaseAdmin';
 
+export interface IUserInfo {
+  first_name: string;
+  email?: string;
+  profile_image: string;
+  status: boolean;
+  is_email_verified?: boolean;
+  provider: string;
+}
+
+const providerNameMap: Record<string, string> = {
+  'google.com': 'Google',
+  'github.com': 'GitHub',
+  'base-app-user': 'Email/Password',
+};
+
 const Signup: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
     await validateRequest(request.body, signupSchema);
@@ -363,17 +378,43 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
   try {
     const { idToken, screenName } = request.body;
 
-    const userInfo = await getUserDataFromToken(idToken, screenName);
-    const { email, first_name, profile_image } = userInfo;
+    const userInfo = await getUserDataFromToken(idToken, response, screenName);
+
+    if (!userInfo) return;
+
+    const { email, first_name, profile_image, provider } = userInfo;
 
     let user = await User.findOne({ email });
-    if (!user) {
+    if (user) {
+      if (user.provider !== provider) {
+        const current = providerNameMap[provider] || provider;
+        const existing = providerNameMap[user.provider] || user.provider;
+
+        if (user.provider === 'base-app-user') {
+          return APIResponse(
+            response,
+            false,
+            HttpStatusCode.BAD_REQUEST,
+            `This email is already registered with Email/Password. Please log in with your email and password or link your ${current} account.`
+          );
+        }
+
+        return APIResponse(
+          response,
+          false,
+          HttpStatusCode.BAD_REQUEST,
+          `This email is already registered with ${existing}. Please log in using ${existing}.`
+        );
+      }
+    } else {
+      // Signup flow
       user = await User.create({
         first_name: first_name,
         email: email,
         profile_image: profile_image,
         status: true,
         is_email_verified: true,
+        provider: provider, // Store the provider
       });
     }
 
@@ -410,20 +451,32 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
   }
 };
 
-export const getUserDataFromToken = async (idToken: string, screenName?: string) => {
-  const decodedToken = await admin.auth().verifyIdToken(idToken);
-  const { email, picture, email_verified, firebase, uid } = decodedToken;
+export const getUserDataFromToken = async (idToken: string, response: Response, screenName?: string): Promise<IUserInfo | undefined> => {
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-  const provider = firebase?.sign_in_provider;
-  const userRecord = await admin.auth().getUser(uid);
-  const firstName = provider === 'github.com' ? screenName ?? userRecord.displayName ?? '' : userRecord.displayName ?? '';
-  return {
-    first_name: firstName,
-    email,
-    profile_image: picture ?? userRecord.photoURL ?? '',
-    status: true,
-    is_email_verified: email_verified,
-  };
+    if (!decodedToken) {
+      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'Invalid or missing user info from Firebase token.');
+      return;
+    }
+    const { email, picture, email_verified, firebase, uid } = decodedToken;
+
+    const provider = firebase?.sign_in_provider;
+    const userRecord = await admin.auth().getUser(uid);
+
+    const firstName = provider === 'github.com' ? (screenName ?? userRecord.displayName ?? '') : (userRecord.displayName ?? '');
+    return {
+      first_name: firstName,
+      email,
+      profile_image: picture ?? userRecord.photoURL ?? '',
+      status: true,
+      is_email_verified: email_verified,
+      provider: provider,
+    };
+  } catch (err) {
+    APIResponse(response, false, HttpStatusCode.UNAUTHORIZED, 'Firebase Token verification failed');
+    return;
+  }
 };
 
 export default { Signup, Signin, RefreshToken, VerifyEmail, ForgotPassword, ChangePassword, ResetPassword, logoutHandler, firebaseSocialLogin };

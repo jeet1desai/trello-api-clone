@@ -42,6 +42,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
     },
     status: { type: Boolean, default: false },
+    provider: {
+      type: String,
+      default: 'base-app-user',
+    },
   },
   { timestamps: true }
 );
