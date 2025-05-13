@@ -30,6 +30,10 @@ export const initializeSocket = (app: Express.Application) => {
       console.log(users);
     });
 
+    socket.on('join_board', (boardId: string) => {
+      socket && socket.join(boardId);
+    });
+
     // _socket.on('disconnect', () => {
     //   for (const [userId, id] of users.entries()) {
     //     if (id === socket?.id) {

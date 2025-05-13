@@ -18,6 +18,7 @@ export interface TaskModelType {
   priority?: Priority;
   position: number;
   status?: TaskStatus;
+  assigned_to?: mongoose.Types.ObjectId;
 }
 
 const schema = new mongoose.Schema<TaskModelType>(
@@ -50,6 +51,11 @@ const schema = new mongoose.Schema<TaskModelType>(
     created_by: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'users',
+    },
+    assigned_to: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'users',
+      default: null,
     },
     start_date: {
       type: Date,

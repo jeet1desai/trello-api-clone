@@ -6,13 +6,26 @@ import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
 import { attachmentSchema, createTaskSchema } from '../schemas/task.schema';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { emitToUser } from '../utils/socket';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { NotificationModel } from '../model/notification.model';
 import { convertObjectId } from '../config/app.config';
+import { getResourceType } from '../helper/getResourceType';
+import { TaskLabelModel } from '../model/taskLabel.model';
+import { CommentModel } from '../model/comment.model';
+import { MemberModel } from '../model/members.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
+
+type BaseQuery = {
+  status_list_id: string;
+};
+
+type FilterQuery = BaseQuery & {
+  $or?: Array<{ assigned_to: string | { $in: string[] } } | { created_by: string | { $in: string[] } } | { _id: { $in: string[] } }>;
+};
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -30,7 +43,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
 
     const nextPosition = lastTask ? lastTask.position + 1 : 1;
 
-    const newTask = await TaskModel.create({
+    const newTask: any = await TaskModel.create({
       title,
       status_list_id,
       board_id,
@@ -39,26 +52,78 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     });
 
     const { io } = getSocket();
-    if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'receive-new-task', { data: newTask });
-    }
+    if (io)
+      io.to(newTask.board_id?.toString() ?? '').emit('receive-new-task', {
+        data: newTask,
+      });
+
+    const members = await MemberModel.find({ boardId: board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(user._id.toString(), 'Created', 'Task', board_id, visibleUserIds, `Task "${title}" was created by ${user.first_name}`);
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
   } catch (err) {
-    if (err instanceof Joi.ValidationError) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else if (err instanceof Error) {
-      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
-    }
+    return next(err);
   }
 };
 
 export const getTaskByStatusIdHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { statusId } = req.query;
-    const tasks = await TaskModel.find({ status_list_id: statusId })
+    //@ts-expect-error
+    const user = req?.user;
+    const currentUserId = user._id;
+
+    const { statusId, filterBy: filterByRaw } = req.body;
+
+    if (!statusId || typeof statusId !== 'string' || !statusId.trim()) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Missing or invalid 'statusId' parameter.");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(statusId)) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Invalid 'statusId' format.");
+    }
+
+    // 1. Get task IDs where user is a member
+    const filterByArray: string[] = Array.isArray(filterByRaw) ? filterByRaw.map(String) : typeof filterByRaw === 'string' ? [filterByRaw] : ['me'];
+
+    const isAll = filterByArray.includes('all');
+    const isMe = filterByArray.includes('me');
+
+    const resolvedFilterBy: string[] = isAll || isMe ? [currentUserId.toString(), ...filterByArray] : filterByArray;
+
+    let taskIdsWithMembership: string[] = [];
+
+    if (!isAll) {
+      const memberTasks = await TaskMemberModel.find({
+        member_id: { $in: resolvedFilterBy },
+      }).select('task_id');
+
+      taskIdsWithMembership = memberTasks.map((m) => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+    }
+    // 2. Construct query
+    const query: FilterQuery = {
+      status_list_id: statusId,
+    };
+
+    if (!isAll) {
+      query.$or = [];
+
+      if (isMe) {
+        query.$or.push({ assigned_to: currentUserId }, { created_by: currentUserId }, { _id: { $in: taskIdsWithMembership } });
+      } else {
+        query.$or.push(
+          { assigned_to: { $in: resolvedFilterBy } },
+          { created_by: { $in: resolvedFilterBy } },
+          { _id: { $in: taskIdsWithMembership } }
+        );
+      }
+    }
+
+    // 3. Fetch tasks
+    const tasks = await TaskModel.find(query)
       .sort({ position: 1 })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -69,9 +134,34 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
             select: '_id name description',
           },
         ],
+      })
+      .populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
       });
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully fetched', tasks);
+    // 4. Enhance task details
+    const taskList = await Promise.all(
+      tasks.map(async (task) => {
+        const [taskLabels, commentCount, memberCount] = await Promise.all([
+          TaskLabelModel.find({ task_id: task._id }).populate({
+            path: 'label_id',
+            select: '_id name backgroundColor textColor boardId',
+          }),
+          CommentModel.countDocuments({ task_id: task._id }),
+          TaskMemberModel.countDocuments({ task_id: task._id }),
+        ]);
+
+        return {
+          ...task.toObject(),
+          labels: taskLabels.map((tl) => tl.label_id),
+          comments: commentCount,
+          members: memberCount,
+        };
+      })
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully fetched', taskList);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -83,7 +173,7 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
   try {
     const { id } = req.params;
     const tasks = await TaskModel.findById({ _id: id })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -97,7 +187,11 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
       })
       .populate({
         path: 'created_by',
-        select: '_id first_name  middle_name last_name email profile_image',
+        select: '_id first_name middle_name last_name email profile_image',
+      })
+      .populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
       });
 
     APIResponse(res, true, HttpStatusCode.OK, 'Task details successfully fetched', tasks);
@@ -228,16 +322,32 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
     let updatedtData1;
     if (updated) {
       await movingTask.save({ validateModifiedOnly: true });
-      updatedtData1 = await TaskModel.findById(movingTask._id);
+      updatedtData1 = await TaskModel.findById(movingTask._id).populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
+      });
     }
 
     const { io } = getSocket();
 
-    if (user._id.toString()) {
-      emitToUser(io, user._id.toString(), 'receive-updated-task', { data: !updated ? movingTask : updatedtData1 });
-    }
+    if (io)
+      io.to(movingTask.board_id?.toString() ?? '').emit('receive-updated-task', {
+        data: !updated ? movingTask : updatedtData1,
+      });
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
+
+    const members = await MemberModel.find({ boardId: movingTask.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Updated',
+      'Task',
+      movingTask?.board_id?.toString() ?? '',
+      visibleUserIds,
+      `Task was udpated by ${user.first_name}`
+    );
 
     APIResponse(res, true, 200, message, !updated ? movingTask : updatedtData1);
   } catch (err) {
@@ -250,14 +360,33 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
   session.startTransaction();
   try {
     const { id } = req.params;
-    const statusExist = await TaskModel.findOne({ _id: id });
-    if (!statusExist) {
+    // @ts-expect-error
+    const user = req?.user;
+    const taskExist = await TaskModel.findOne({ _id: id });
+    if (!taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
     const status = await TaskModel.findByIdAndDelete({ _id: id }, { session });
     await session.commitTransaction();
     session.endSession();
+
+    const members = await MemberModel.find({ boardId: taskExist.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    const { io } = getSocket();
+    if (io)
+      io.to(status?.board_id?.toString() ?? '').emit('remove_task', {
+        data: status,
+      });
+    await saveRecentActivity(
+      user._id.toString(),
+      'Deleted',
+      'Task',
+      taskExist?.board_id?.toString() ?? '',
+      visibleUserIds,
+      `Task was deleted by ${user.first_name}`
+    );
     APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', status);
   } catch (err) {
     await session.abortTransaction();
@@ -313,19 +442,34 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       }
     );
 
+    let visibleUserIds = [user._id.toString()];
+
     const { io } = getSocket();
+    if (io)
+      io.to(updateAttachment?.board_id?.toString() ?? '').emit('upload-attachment-task', {
+        data: updateAttachment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `New attachment has been uploaded by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'upload-attachment-task', { data: updateAttachment });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Uploaded',
+      'Attachment',
+      taskExist?.board_id?.toString() ?? '',
+      visibleUserIds,
+      `Attachment has been uploaded by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
     return;
@@ -355,27 +499,42 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Image not found..!');
       return;
     }
-    const result = await deleteFromCloudinary(attachmentData.imageId);
-    const removeImage = taskExist.attachment.filter((item: any) => item._id != imageId);
+    const resourfceType = await getResourceType(attachmentData.imageName);
+    await deleteFromCloudinary(attachmentData.imageId, resourfceType);
 
-    const updateAttachment = await TaskModel.findByIdAndUpdate(taskId, {
-      attachment: removeImage,
-    });
+    taskExist.attachment = taskExist.attachment.filter((att: any) => att._id.toString() !== imageId);
+    const updateAttachment = await taskExist.save();
+
+    let visibleUserIds = [user._id.toString()];
 
     const { io } = getSocket();
+    if (io)
+      io.to(updateAttachment?.board_id?.toString() ?? '').emit('remove_task_attachment', {
+        data: updateAttachment,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `Attachment has been removed by "${user.first_name} ${user.last_name}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted');
+    await saveRecentActivity(
+      user._id.toString(),
+      'Deleted',
+      'Attachment',
+      taskExist?.board_id?.toString() ?? '',
+      visibleUserIds,
+      `Attachment has been deleted by ${user.first_name}`
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted', updateAttachment);
     return;
   } catch (err) {
     if (err instanceof mongoose.Error.CastError) {

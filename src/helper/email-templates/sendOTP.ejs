@@ -1,86 +1,124 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <style>
-        .container {
-            display: flex;
-            width: 100%;
-            justify-content: center;
-            align-items: center;
-            background: #F3F6F9;
-            height: 100%;
-        }
-
-        .container-inner {
-            margin: auto;
-            background: #F3F6F9;
-            padding: 30px 10px;
-            width: 100%;
-            min-height: 250px;
-        }
-
-        .header {
-            font-size: 26px;
-            font-weight: bold;
-            margin: 10px 0px;
-        }
-
-        .logo {
-            height: 100px;
-            width: 100px;
-        }
-
-        .otp-text {
-            font-size: 24px;
-            letter-spacing: 3px;
-            width: 100%;
-            font-weight: 600;
-            margin: 10px 0px;
-        }
-
-        .line {
-            margin-top: 10px;
-        }
-
-        .validate-text {
-            color: tomato;
-        }
-
-        .margin {
-            margin-top: 10px;
-        }
-
-        .footer {
-            margin-top: 10px;
-            color: rgb(61, 60, 60, 0.5);
-            font-weight: 400;
-            font-size: 10px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      background: #f8fafc;
+      margin: 0;
+      padding: 20px;
+      color: #1e293b;
+    }
+    
+    .email-container {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 600px;
+      margin: auto;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1890ff;
+      margin-bottom: 20px;
+    }
+    
+    h1 {
+      color: #1e293b;
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0 0 20px 0;
+    }
+    
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: #475569;
+      margin: 0 0 20px 0;
+    }
+    
+    .otp-container {
+      background: #f1f5f9;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 30px 0;
+      text-align: center;
+    }
+    
+    .otp-code {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      color: #1890ff;
+      margin: 0;
+    }
+    
+    .warning {
+      color: #ef4444;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 20px;
+    }
+    
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: center;
+    }
+    
+    @media (max-width: 600px) {
+      .email-container {
+        padding: 30px 20px;
+      }
+      
+      h1 {
+        font-size: 20px;
+      }
+      
+      p {
+        font-size: 14px;
+      }
+      
+      .otp-code {
+        font-size: 24px;
+        letter-spacing: 6px;
+      }
+    }
+  </style>
 </head>
-
 <body>
-    <center>
-        <center class="container-inner">
-            <center>
-                <h1 class="logomain"> BaseTeamWork </h1>
-            </center>
-            <center>
-                <p class="header">OTP</p>
-            </center>
-            <center><span class="otp-text">
-                    <%= otp %>
-                </span></center>
-            <center class="margin"><span class="line">Here is your OTP verification code</span></center>
-            <center>
-                <p class="validate-text">It will expires in 3 minutes</p>
-            </center>
-        </center>
-        <center class="footer">
-            @2025 BaseTeamWork By Tatvasoft.
-        </center>
-    </center>
+  <div class="email-container">
+    <div class="header">
+      <div class="logo">BaseTeam</div>
+      <h1>Your OTP Code</h1>
+    </div>
 
+    <p>Here is your One-Time Password (OTP) for verification:</p>
+
+    <div class="otp-container">
+      <p class="otp-code"><%= otp %></p>
+    </div>
+
+    <p class="warning">This OTP will expire in 3 minutes. Please do not share this code with anyone.</p>
+
+    <div class="footer">
+      &copy; <%= new Date().getFullYear() %> BaseTeam. All rights reserved.
+    </div>
+  </div>
 </body>
-
 </html>

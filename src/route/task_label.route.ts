@@ -6,7 +6,7 @@ const taskRouter = express.Router();
 
 taskRouter.use(userMiddleware);
 taskRouter.post('/add', addTaskLabelHandler);
-taskRouter.delete('/delete/:id', deleteTaskLabelHandler);
+taskRouter.delete('/delete', deleteTaskLabelHandler);
 taskRouter.get('/get/:taskId', getTaskLabelHandler);
 
 export default taskRouter;

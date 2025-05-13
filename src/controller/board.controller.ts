@@ -6,7 +6,7 @@ import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import mongoose, { PipelineStage } from 'mongoose';
 import { BoardModel } from '../model/board.model';
-import { convertObjectId, MEMBER_INVITE_STATUS, MEMBER_ROLES } from '../config/app.config';
+import { convertObjectId, getSortOption, MEMBER_INVITE_STATUS, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
 import { WorkSpaceModel } from '../model/workspace.model';
 import { MemberModel } from '../model/members.model';
 import User from '../model/user.model';
@@ -16,6 +16,8 @@ import ejs from 'ejs';
 import { getSocket } from '../config/socketio.config';
 import { NotificationModel } from '../model/notification.model';
 import { emitToUser } from '../utils/socket';
+import { saveRecentActivity } from '../helper/recentActivityService';
+import { getPagination } from '../utils/pagination';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -63,6 +65,8 @@ export const createBoardController = async (req: express.Request, res: express.R
       { session }
     );
 
+    let visibleUserIds = [user._id.toString()];
+
     if (members && members.length > 0) {
       for (const email of members) {
         if (email === user.email) continue;
@@ -84,11 +88,12 @@ export const createBoardController = async (req: express.Request, res: express.R
         );
 
         if (existingUser) {
+          visibleUserIds.push(existingUser._id.toString());
           const notification = await NotificationModel.create({
             message: `You have been invited to board "${name}"`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -97,6 +102,15 @@ export const createBoardController = async (req: express.Request, res: express.R
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: invite._id.toString() });
       }
     }
+
+    await saveRecentActivity(
+      user?._id,
+      'Created',
+      'Board',
+      board?._id.toString(),
+      visibleUserIds,
+      `Board "${board.name}" was created by ${user.first_name}`
+    );
 
     await session.commitTransaction();
     session.endSession();
@@ -123,10 +137,15 @@ export const updateBoardController = async (req: express.Request, res: express.R
     const { id } = req.params;
     const { name, description, members } = req.body;
 
-    const board = await BoardModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
+    let board: any = await BoardModel.findById({ _id: id });
 
     if (!board) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
+      return;
+    }
+
+    if (board.createdBy.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task');
       return;
     }
 
@@ -135,13 +154,19 @@ export const updateBoardController = async (req: express.Request, res: express.R
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
       return;
     }
+    board = await BoardModel.findByIdAndUpdate({ _id: id }, { name, description }, { runValidators: true, returnDocument: 'after' });
+    const boardMembers = await MemberModel.find({ boardId: board._id }).select('memberId');
+    let visibleUserIds = new Set([user._id.toString()]);
+
+    for (const member of boardMembers as any) {
+      visibleUserIds.add(member?.memberId.toString());
+    }
 
     if (members && members.length > 0) {
       for (const email of members) {
         if (email === user.email) continue;
 
         const existingUser = await User.findOne({ email });
-
         const isAlreadyMember = existingUser
           ? await MemberModel.exists({
               memberId: convertObjectId(existingUser._id.toString()),
@@ -173,7 +198,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             message: `You have been invited to board "${name}" again`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -188,7 +213,7 @@ export const updateBoardController = async (req: express.Request, res: express.R
             message: `You have been invited to board "${name}"`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -208,11 +233,12 @@ export const updateBoardController = async (req: express.Request, res: express.R
         });
 
         if (existingUser) {
+          visibleUserIds.add(existingUser._id.toString());
           const notification = await NotificationModel.create({
             message: `You have been invited to board "${name}"`,
             action: 'invited',
             receiver: convertObjectId(existingUser._id.toString()),
-            sender: convertObjectId(user._id.toString()),
+            sender: user,
           });
 
           emitToUser(io, existingUser._id.toString(), 'receive_notification', { data: notification });
@@ -221,6 +247,15 @@ export const updateBoardController = async (req: express.Request, res: express.R
         await sendBoardInviteEmail({ user, email, existingUser, board, workspace, inviteId: newInvite._id.toString() });
       }
     }
+
+    await saveRecentActivity(
+      user?._id,
+      'Updated',
+      'Board',
+      board?._id.toString(),
+      Array.from(visibleUserIds),
+      `Board "${board.name}" was updated by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Board successfully updated', board);
   } catch (err) {
@@ -249,6 +284,10 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found', req.body);
       return;
     }
+    if (board?.createdBy?.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task');
+      return;
+    }
 
     const requestingMember = await MemberModel.findOne({ boardId: id, memberId: user._id });
     if (!requestingMember || requestingMember.role !== MEMBER_ROLES.ADMIN) {
@@ -264,16 +303,18 @@ export const deleteBoardController = async (req: express.Request, res: express.R
     await BoardModel.deleteOne({ _id: id }, { session });
     await MemberModel.deleteMany({ boardId: id }, { session });
     await BoardInviteModel.deleteMany({ boardId: id }, { session });
+    let visibleUserIds = [user._id.toString()];
 
     for (const member of membersToNotify) {
-      const userToNotify = member.memberId;
+      const userToNotify: any = member.memberId;
+      visibleUserIds.push(userToNotify._id?.toString());
       const [notification] = await NotificationModel.create(
         [
           {
             message: `Board "${board.name}" is deleted by admin and you have been removed from board`,
             action: 'removed',
             receiver: userToNotify,
-            sender: user._id,
+            sender: user,
           },
         ],
         { session }
@@ -281,6 +322,14 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       emitToUser(io, userToNotify?.toString(), 'receive_notification', { data: notification });
     }
 
+    await saveRecentActivity(
+      user?._id,
+      'Deleted',
+      'Board',
+      board?._id.toString(),
+      visibleUserIds,
+      `Board "${board.name}" was deleted by ${user.first_name}`
+    );
     await session.commitTransaction();
     session.endSession();
 
@@ -299,6 +348,8 @@ export const deleteBoardController = async (req: express.Request, res: express.R
 
 export const getBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
+    // @ts-expect-error
+    const user = req.user;
     const { id } = req.params;
 
     const [board] = await BoardModel.aggregate(getBoardDetailsQuery(id));
@@ -308,7 +359,11 @@ export const getBoardController = async (req: express.Request, res: express.Resp
       return;
     }
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Board successfully fetched', board);
+    if (board?.members?.map((member: { memberId: any }) => member.memberId.toString()).includes(user._id?.toString())) {
+      APIResponse(res, true, HttpStatusCode.OK, 'Board successfully fetched', board);
+    } else {
+      APIResponse(res, true, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to view this board');
+    }
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -403,7 +458,7 @@ export const getWorkspaceBoardsController = async (req: express.Request, res: ex
   }
 };
 
-const getWorkspaceBoardsQuery = (workspaceId: string, userId: string): PipelineStage[] => {
+export const getWorkspaceBoardsQuery = (workspaceId: string, userId: string): PipelineStage[] => {
   return [
     { $match: { $expr: { $eq: ['$workspaceId', convertObjectId(workspaceId)] } } },
     {
@@ -484,8 +539,8 @@ export const sendBoardInviteEmail = async ({
     inviterName: `${user.first_name} ${user.last_name}`,
     boardName: board.name,
     workspaceName: workspace.name,
-    link: `${process.env.FE_URL}/invitation/${inviteId}`,
-    registerLink: `${process.env.FE_URL}/register`,
+    link: `${process.env.BOARD_FE_URL}/invitation/${inviteId}/${existingUser?._id}`,
+    registerLink: `${process.env.BOARD_FE_URL}/register`,
   });
 
   const mailOptions = {
@@ -501,10 +556,46 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   try {
     // @ts-expect-error
     const user = req.user;
+    const { page = '1', perPage = '12', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
 
-    const boards = await BoardModel.aggregate(getBoardListQuery(user._id.toString()));
+    const parsedPage = Number(page) || 1;
+    const parsedLimit = Number(perPage) || 12;
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', boards);
+    const {
+      skip,
+      limit,
+      page: currentPage,
+    } = getPagination({
+      page: parsedPage,
+      limit: parsedLimit,
+    });
+    // Get the sorting option based on sortType
+    const sortOption = getSortOption(parseInt(sortType as string) || SORT_TYPE.CreatedDateDesc);
+
+    // Create base pipeline
+    const pipeline = getBoardListQuery(user._id.toString(), search as string, sortOption);
+
+    // Paginated pipeline
+    const paginatedPipeline = [...pipeline, { $skip: skip }, { $limit: limit }];
+
+    // Execute paginated query
+    const boards = await BoardModel.aggregate(paginatedPipeline);
+
+    // Get total count for pagination (same filter logic but no skip/limit)
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await BoardModel.aggregate(countPipeline);
+    const totalRecords = countResult[0]?.total || 0;
+
+    // Send response
+    APIResponse(res, true, HttpStatusCode.OK, 'Boards successfully fetched', {
+      boards,
+      pagination: {
+        currentPage,
+        totalPages: Math.ceil(totalRecords / limit),
+        totalRecords,
+        limit,
+      },
+    });
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -512,8 +603,8 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   }
 };
 
-const getBoardListQuery = (userId: string): PipelineStage[] => {
-  return [
+const getBoardListQuery = (userId: string, search: string, sortOption: Record<string, 1 | -1>): PipelineStage[] => {
+  const pipeline: PipelineStage[] = [
     // Find boards where the user is a member or admin
     {
       $lookup: {
@@ -532,6 +623,7 @@ const getBoardListQuery = (userId: string): PipelineStage[] => {
       },
     },
     { $match: { $expr: { $gt: [{ $size: '$membership' }, 0] } } },
+
     // Get all members of the board
     {
       $lookup: {
@@ -556,9 +648,28 @@ const getBoardListQuery = (userId: string): PipelineStage[] => {
         as: 'members',
       },
     },
+
     // Lookup workspace details
     { $lookup: { from: 'workspaces', localField: 'workspaceId', foreignField: '_id', as: 'workspace' } },
     { $unwind: { path: '$workspace', preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 1, name: 1, description: 1, members: 1, workspace: 1 } },
+
+    // Apply search filter if present
+    ...(search
+      ? [
+          {
+            $match: {
+              $or: [{ name: { $regex: search, $options: 'i' } }],
+            },
+          },
+        ]
+      : []),
+
+    // Sort the result based on sortOption
+    { $sort: sortOption },
+
+    // Project the desired fields
+    { $project: { _id: 1, name: 1, description: 1, createdAt: 1, members: 1, workspace: 1 } },
   ];
+
+  return pipeline;
 };

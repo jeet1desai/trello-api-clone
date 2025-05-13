@@ -12,6 +12,7 @@ import { TaskMemberModel } from '../model/taskMember.model';
 import { emitToUser } from '../utils/socket';
 import { convertObjectId } from '../config/app.config';
 import { NotificationModel } from '../model/notification.model';
+import { saveRecentActivity } from '../helper/recentActivityService';
 
 export const addTaskLabelHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -38,21 +39,46 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       label_id,
     });
 
+    const taskLabel: any = await TaskLabelModel.findById(newTaskLabel._id)
+      .populate({
+        path: 'task_id',
+        select: '_id title description board_id status_list_id position position',
+      })
+      .populate({
+        path: 'label_id',
+        select: '_id name backgroundColor textColor boardId',
+      });
+
+    let visibleUserIds = [user._id.toString()];
+
     const { io } = getSocket();
+    if (io)
+      io.to(taskLabel?.task_id?.board_id?.toString() ?? '').emit('receive-new-task-label', {
+        data: taskLabel,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `New label added in task`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
-        emitToUser(io, member?.member_id.toString(), 'receive-new-task-label', { data: newTaskLabel });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
 
-    APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', newTaskLabel);
+    await saveRecentActivity(
+      user._id.toString(),
+      'Added',
+      'Task Label',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Label has been added in Task ${taskExist.title} by ${user.first_name}`
+    );
+
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', taskLabel);
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
@@ -87,33 +113,49 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { id } = req.params;
+    const { taskId, labelId } = req.query;
     // @ts-expect-error
     const user = req?.user;
-    const taskLabelExist: any = await TaskLabelModel.findOne({ _id: id });
-
+    const taskLabelExist: any = await TaskLabelModel.findOne({ task_id: taskId, label_id: labelId });
     if (!taskLabelExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task label not found..!');
       return;
     }
+    const taskExist = await TaskModel.findOne({ _id: taskId });
     const taskMembers = await TaskMemberModel.find({ task_id: taskLabelExist.task_id });
 
-    const taskLabel = await TaskLabelModel.findByIdAndDelete({ _id: id }, { session });
+    const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session });
     await session.commitTransaction();
     session.endSession();
 
+    let visibleUserIds = [user._id.toString()];
+
     const { io } = getSocket();
+    if (io)
+      io.to(taskExist?.board_id?.toString() ?? '').emit('remove_task_label', {
+        data: taskLabel,
+      });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
+        visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
           message: `Label removed from task`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
-          sender: convertObjectId(user._id.toString()),
+          sender: user,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
     }
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Removed',
+      'Task Label',
+      taskExist?.board_id?.toString() || '',
+      visibleUserIds,
+      `Label has been delete in Task ${taskExist?.title} by ${user.first_name}`
+    );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Task label successfully removed', taskLabel);
   } catch (err) {
