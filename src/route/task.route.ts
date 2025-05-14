@@ -4,6 +4,7 @@ import {
   createTaskHandler,
   deleteAttachmentHandler,
   deleteTaskHandler,
+  duplicateTaskHandler,
   getAttachmentHandler,
   getTaskByIdHandler,
   getTaskByStatusIdHandler,
@@ -16,6 +17,7 @@ const taskRouter = express.Router();
 
 taskRouter.use(userMiddleware);
 taskRouter.post('/create-task', createTaskHandler);
+taskRouter.post('/duplicate-task', duplicateTaskHandler);
 taskRouter.post('/get-task', getTaskByStatusIdHandler);
 taskRouter.get('/get-task/:id', getTaskByIdHandler);
 taskRouter.put('/update-task', updateTaskHandler);

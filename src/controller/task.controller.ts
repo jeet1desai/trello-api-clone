@@ -5,14 +5,14 @@ import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { attachmentSchema, createTaskSchema } from '../schemas/task.schema';
+import { attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { emitToUser } from '../utils/socket';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { NotificationModel } from '../model/notification.model';
-import { convertObjectId } from '../config/app.config';
+import { convertObjectId, MEMBER_ROLES } from '../config/app.config';
 import { getResourceType } from '../helper/getResourceType';
 import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
@@ -563,5 +563,97 @@ export const getAttachmentHandler = async (req: Request, res: Response, next: Ne
     } else if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
     }
+  }
+};
+
+export const duplicateTaskHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    await validateRequest(req.body, duplicateTaskSchema);
+    // @ts-expect-error
+    const user = req?.user;
+    const { taskId } = req.body;
+
+    // Find the original task
+    const originalTask = await TaskModel.findById(taskId).lean();
+    if (!originalTask) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found');
+      return;
+    }
+
+    const requestingMember = await MemberModel.findOne({ boardId: originalTask.board_id, memberId: user._id });
+    if (!requestingMember || requestingMember.role !== MEMBER_ROLES.ADMIN) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to remove members');
+      return;
+    }
+
+    // Create a new task with the same properties
+    const duplicatedTask = new TaskModel({
+      title: `${originalTask.title} - Copy`,
+      description: originalTask.description,
+      board_id: originalTask.board_id,
+      status_list_id: originalTask.status_list_id,
+      created_by: user._id,
+      assigned_to: originalTask.assigned_to,
+      start_date: originalTask.start_date,
+      end_date: originalTask.end_date,
+      priority: originalTask.priority,
+      position: 0,
+      status: originalTask.status,
+      attachment: originalTask.attachment,
+    });
+    const savedTask = await duplicatedTask.save();
+
+    // Duplicate task members if any
+    const taskMembers = await TaskMemberModel.find({ task_id: taskId });
+    if (taskMembers.length > 0) {
+      const newTaskMembers = taskMembers.map((member) => ({
+        task_id: savedTask._id,
+        member_id: member.member_id,
+        board_id: originalTask.board_id,
+      }));
+      await TaskMemberModel.insertMany(newTaskMembers);
+    }
+
+    // Duplicate task labels if any
+    const taskLabels = await TaskLabelModel.find({ task_id: taskId });
+    if (taskLabels.length > 0) {
+      const newTaskLabels = taskLabels.map((label) => ({
+        task_id: savedTask._id,
+        label_id: label.label_id,
+      }));
+      await TaskLabelModel.insertMany(newTaskLabels);
+    }
+
+    // Emit socket event for the new task
+    const { io } = getSocket();
+    if (io) {
+      io.to(originalTask.board_id?.toString() ?? '').emit('receive-new-task', {
+        data: savedTask,
+      });
+    }
+
+    // Save recent activity
+    const members = await MemberModel.find({ boardId: originalTask.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Duplicated',
+      'Task',
+      originalTask.board_id?.toString() ?? '',
+      visibleUserIds,
+      `Task "${originalTask.title}" was duplicated by ${user.first_name}`
+    );
+
+    APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully duplicated', savedTask);
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof mongoose.Error.CastError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid task ID');
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+    return next(err);
   }
 };

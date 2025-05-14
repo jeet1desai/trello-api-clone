@@ -1,5 +1,12 @@
 import Joi from 'joi';
 
+export const duplicateTaskSchema = Joi.object({
+  taskId: Joi.string().required().trim().messages({
+    'string.empty': 'Task id is required',
+    'any.required': 'Task id is required',
+  }),
+});
+
 export const createTaskSchema = Joi.object({
   title: Joi.string().required().trim().messages({
     'string.empty': 'Title is required',
