@@ -5,10 +5,6 @@ export const signupSchema = Joi.object({
     'string.empty': 'First name is required',
     'any.required': 'First name is required',
   }),
-  middle_name: Joi.string().required().trim().messages({
-    'string.empty': 'Middle name is required',
-    'any.required': 'Middle name is required',
-  }),
   last_name: Joi.string().required().trim().messages({
     'string.empty': 'Last name is required',
     'any.required': 'Last name is required',

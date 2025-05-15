@@ -121,9 +121,9 @@ export const assignTaskMemberHandler = async (req: Request, res: Response, next:
     }
 
     const assignedMember = {
-      _id: member_id,
-      first_name: memberDetails.first_name,
-      last_name: memberDetails.last_name,
+      assigned_to: { _id: member_id, first_name: memberDetails.first_name, last_name: memberDetails.last_name },
+      status_list_id: taskExist.status_list_id,
+      task_id: taskExist._id,
     };
 
     const { io } = getSocket();
@@ -190,9 +190,9 @@ export const unassignTaskMemberHandler = async (req: Request, res: Response, nex
     await TaskModel.findByIdAndUpdate(taskId, { assigned_to: null });
 
     const unassignedMember = {
-      _id: memberDetails._id,
-      first_name: memberDetails.first_name,
-      last_name: memberDetails.last_name,
+      assigned_to: { _id: memberDetails._id, first_name: memberDetails.first_name, last_name: memberDetails.last_name },
+      status_list_id: taskExist.status_list_id,
+      task_id: taskExist._id,
     };
 
     const { io } = getSocket();
