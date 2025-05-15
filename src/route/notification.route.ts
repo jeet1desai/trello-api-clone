@@ -1,6 +1,10 @@
 import express from 'express';
 import userMiddleware from '../middleware/user.middleware';
-import { getNotificationListController, markNotificationAsReadController, markAllNotificationsAsReadController } from '../controller/notification.controller';
+import {
+  getNotificationListController,
+  markNotificationAsReadController,
+  markAllNotificationsAsReadController,
+} from '../controller/notification.controller';
 
 const router = express.Router();
 

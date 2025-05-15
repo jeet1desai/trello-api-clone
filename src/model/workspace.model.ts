@@ -28,7 +28,7 @@ const schema = new mongoose.Schema<WorkspaceModelType>(
     boards: {
       type: Number,
       default: 0,
-    }
+    },
   },
   { timestamps: true }
 );
