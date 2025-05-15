@@ -65,9 +65,9 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     const { io } = getSocket();
     if (io)
       if (taskMembers.length > 0) {
-        // io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
-        //   data: newComment,
-        // });
+        io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
+          data: comments,
+        });
         taskMembers.forEach(async (member: any) => {
           const notification = await NotificationModel.create({
             message: `New commend has been added by "${user.first_name} ${user.last_name}"`,
@@ -173,7 +173,7 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
     const { io } = getSocket();
     if (io)
       io.to(updatedComment?.task_id?.board_id?.toString() ?? '').emit('remove_comment', {
-        data: taskLabel,
+        data: updatedComment,
       });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {

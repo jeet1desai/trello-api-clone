@@ -124,7 +124,7 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
     const taskExist = await TaskModel.findOne({ _id: taskId });
     const taskMembers = await TaskMemberModel.find({ task_id: taskLabelExist.task_id });
 
-    const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session });
+    const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session }).populate('task_id');
     await session.commitTransaction();
     session.endSession();
 
