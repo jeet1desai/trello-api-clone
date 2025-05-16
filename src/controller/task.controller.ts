@@ -356,8 +356,6 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
 };
 
 export const deleteTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
   try {
     const { id } = req.params;
     // @ts-expect-error
@@ -367,17 +365,17 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
       return;
     }
-    const status = await TaskModel.findByIdAndDelete({ _id: id }, { session });
-    await session.commitTransaction();
-    session.endSession();
+    const tasks = await TaskModel.findByIdAndDelete({ _id: id });
 
     const members = await MemberModel.find({ boardId: taskExist.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
+    await Promise.all([TaskLabelModel.deleteMany({ task_id: id }), TaskMemberModel.deleteMany({ task_id: id })]);
+
     const { io } = getSocket();
     if (io)
-      io.to(status?.board_id?.toString() ?? '').emit('remove_task', {
-        data: status,
+      io.to(tasks?.board_id?.toString() ?? '').emit('remove_task', {
+        data: tasks,
       });
     await saveRecentActivity(
       user._id.toString(),
@@ -387,11 +385,8 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       visibleUserIds,
       `Task was deleted by ${user.first_name}`
     );
-    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', status);
+    APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', tasks);
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }

@@ -18,6 +18,10 @@ import { NotificationModel } from '../model/notification.model';
 import { emitToUser } from '../utils/socket';
 import { saveRecentActivity } from '../helper/recentActivityService';
 import { getPagination } from '../utils/pagination';
+import { StatusModel } from '../model/status.model';
+import { TaskModel } from '../model/task.model';
+import { TaskLabelModel } from '../model/taskLabel.model';
+import { TaskMemberModel } from '../model/taskMember.model';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -300,9 +304,19 @@ export const deleteBoardController = async (req: express.Request, res: express.R
 
     const membersToNotify = await MemberModel.find({ boardId: id, memberId: { $ne: user._id } }).populate('memberId');
 
-    await BoardModel.deleteOne({ _id: id }, { session });
-    await MemberModel.deleteMany({ boardId: id }, { session });
-    await BoardInviteModel.deleteMany({ boardId: id }, { session });
+    const tasks = await TaskModel.find({ board_id: id }, '_id', { session });
+    const taskIds = tasks.map((task) => task._id);
+
+    await Promise.all([
+      BoardModel.deleteOne({ _id: id }, { session }),
+      MemberModel.deleteMany({ boardId: id }, { session }),
+      BoardInviteModel.deleteMany({ boardId: id }, { session }),
+      StatusModel.deleteMany({ board_id: id }, { session }),
+      TaskModel.deleteMany({ board_id: id }, { session }),
+      TaskLabelModel.deleteMany({ task_id: { $in: taskIds } }, { session }),
+      TaskMemberModel.deleteMany({ task_id: { $in: taskIds } }, { session }),
+    ]);
+
     let visibleUserIds = [user._id.toString()];
 
     for (const member of membersToNotify) {
