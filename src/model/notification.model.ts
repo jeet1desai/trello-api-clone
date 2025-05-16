@@ -7,6 +7,7 @@ export interface NotificationModelType {
   read?: boolean;
   receiver?: mongoose.Schema.Types.ObjectId;
   sender?: mongoose.Schema.Types.ObjectId;
+  link?: string;
 }
 
 const schema = new mongoose.Schema<NotificationModelType>(
@@ -30,6 +31,10 @@ const schema = new mongoose.Schema<NotificationModelType>(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'users',
     },
+    link: {
+      type: String,
+      default: "",
+    }
   },
   { timestamps: true }
 );

@@ -152,21 +152,19 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
 
     const sortOption = getSortOption(parseInt(sortType as string) || SORT_TYPE.CreatedDateDesc);
 
-    // 1. Get workspaceIds from boards where user is a member
-    const boards = await MemberModel.find({ memberId: user._id, role: MEMBER_ROLES.MEMBER });
-    const boardWorkspaceIds = boards.map((board) => board?.workspaceId?.toString());
-
-    // 2. Find workspaces where user is creator or has a board inside if search
+    // 2. Find workspaces where user is creator
     const filters: FilterQuery<WorkspaceModelType> = {
       $and: [
         {
-          $or: [{ createdBy: user._id }, { _id: { $in: boardWorkspaceIds } }],
+          $or: [{ createdBy: user._id }],
         },
       ],
     };
 
-    if (search) {
-      filters.name = { $regex: search, $options: 'i' };
+    const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special chars
+    const safeSearch = escapeRegex(search as string);
+    if (safeSearch) {
+      filters.name = { $regex: safeSearch, $options: 'i' };
     }
 
     // 3. Get total count (for pagination metadata) and fetch workspaces
