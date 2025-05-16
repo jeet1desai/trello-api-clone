@@ -8,7 +8,9 @@ export const getUserProfileHandler = async (req: express.Request, res: express.R
   try {
     // @ts-expect-error
     const user = req?.user;
-    const userData = await User.findById({ _id: user._id }).select('_id first_name middle_name last_name email profile_image status');
+    const userData = await User.findById({ _id: user._id }).select(
+      '_id first_name middle_name last_name email profile_image status is_password_available'
+    );
     APIResponse(res, true, HttpStatusCode.OK, 'User profile successfully fetched', userData);
     return;
   } catch (err) {
