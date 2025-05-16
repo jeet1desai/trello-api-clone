@@ -9,6 +9,7 @@ import mongoose from 'mongoose';
 import { getSocket } from '../config/socketio.config';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
+import { TaskModel } from '../model/task.model';
 
 export const createStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -194,9 +195,16 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Status not found..!');
       return;
     }
+
+    // Delete all tasks associated with this status
+    await TaskModel.deleteMany({ status_list_id: id, board_id: statusExist.board_id }, { session });
+
+    // Delete the status
     const status = await StatusModel.findByIdAndDelete({ _id: id }, { session });
+
     await session.commitTransaction();
     session.endSession();
+
     const members = await MemberModel.find({ boardId: statusExist.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
@@ -208,7 +216,7 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
 
     await saveRecentActivity(
       user._id.toString(),
-      'Updated',
+      'Deleted',
       'Status',
       statusExist.board_id?.toString() ?? '',
       visibleUserIds,

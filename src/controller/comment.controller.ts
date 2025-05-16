@@ -25,7 +25,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     const user = req?.user;
     const attachments = req.files as Express.Multer.File[];
     const { comment, task_id, member } = req.body;
-    const taskExist = await TaskModel.findOne({ _id: task_id });
+    const taskExist: any = await TaskModel.findOne({ _id: task_id });
 
     if (!taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
@@ -65,9 +65,9 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     const { io } = getSocket();
     if (io)
       if (taskMembers.length > 0) {
-        // io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
-        //   data: newComment,
-        // });
+        io.to(comments?.task_id?.board_id?.toString() ?? '').emit('receive_new_comment', {
+          data: comments,
+        });
         taskMembers.forEach(async (member: any) => {
           const notification = await NotificationModel.create({
             message: `New commend has been added by "${user.first_name} ${user.last_name}"`,
@@ -102,7 +102,16 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
         html,
       };
 
+      const notification = await NotificationModel.create({
+        message: `You are mentioned in the comment by "${user.first_name} ${user.last_name}"`,
+        action: 'invited',
+        receiver: convertObjectId(validMember._id.toString()),
+        sender: user,
+        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
+      });
+
       await sendEmail(mailOptions);
+      emitToUser(io, validMember?._id.toString(), 'receive_notification', { data: notification });
     }
     APIResponse(res, true, HttpStatusCode.CREATED, 'Comment successfully added', comments);
   } catch (err) {
@@ -173,15 +182,16 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
     const { io } = getSocket();
     if (io)
       io.to(updatedComment?.task_id?.board_id?.toString() ?? '').emit('remove_comment', {
-        data: taskLabel,
+        data: updatedComment,
       });
     if (taskMembers.length > 0) {
       taskMembers.forEach(async (member: any) => {
         const notification = await NotificationModel.create({
-          message: `Comment has been removed from task`,
+          message: `Comment has been removed from task "${updatedComment.task_id.title}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
+          link: `/board/${updatedComment.task_id.board_id.toString()}?task_id=${updatedComment.task_id._id.toString()}`
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -317,6 +327,7 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
+          link: `/board/${updatedComment.task_id.board_id?.toString()}?task_id=${updatedComment.task_id._id?.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });

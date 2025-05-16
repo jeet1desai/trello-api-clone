@@ -60,10 +60,11 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       taskMembers.forEach(async (member: any) => {
         visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
-          message: `New label added in task`,
+          message: `New label added in task "${taskExist.title}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -121,10 +122,10 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task label not found..!');
       return;
     }
-    const taskExist = await TaskModel.findOne({ _id: taskId });
+    const taskExist: any = await TaskModel.findOne({ _id: taskId });
     const taskMembers = await TaskMemberModel.find({ task_id: taskLabelExist.task_id });
 
-    const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session });
+    const taskLabel = await TaskLabelModel.findOneAndDelete({ task_id: taskId, label_id: labelId }, { session }).populate('task_id');
     await session.commitTransaction();
     session.endSession();
 
@@ -139,10 +140,11 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
       taskMembers.forEach(async (member: any) => {
         visibleUserIds.push(member?.member_id.toString());
         const notification = await NotificationModel.create({
-          message: `Label removed from task`,
+          message: `Label removed from task "${taskExist?.title}"`,
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });

@@ -46,10 +46,7 @@ export const markAllNotificationsAsReadController = async (req: express.Request,
     // @ts-expect-error
     const user = req.user;
 
-    await NotificationModel.updateMany(
-      { receiver: user._id, read: false },
-      { $set: { read: true } }
-    );
+    await NotificationModel.updateMany({ receiver: user._id, read: false }, { $set: { read: true } });
 
     APIResponse(res, true, HttpStatusCode.OK, 'All notifications marked as read');
   } catch (err) {
