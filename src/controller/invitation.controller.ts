@@ -310,7 +310,7 @@ export const getInvitationListController = async (req: express.Request, res: exp
 
     const statusMap: Record<string, string[]> = {
       ALL: ['ADMIN_PENDING', 'ADMIN_APPROVED', 'ADMIN_REJECTED', 'COMPLETED'],
-      APPROVED: ['ADMIN_APPROVED'],
+      APPROVED: ['ADMIN_APPROVED', 'COMPLETED'],
       PENDING: ['ADMIN_PENDING'],
       REJECTED: ['ADMIN_REJECTED'],
     };

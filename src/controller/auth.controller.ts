@@ -417,7 +417,7 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
         status: true,
         is_email_verified: true,
         provider: provider,
-        is_password_available: !user.password ? false : true,
+        is_password_available: !user?.password ? false : true,
       });
     }
 
