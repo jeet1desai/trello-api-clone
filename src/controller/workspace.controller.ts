@@ -208,9 +208,12 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
 
 export const updateWorkSpaceFavoriteController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const { id, isFavorite } = req?.query;
     // @ts-expect-error
     const user = req?.user;
+
+    const { id } = req.params;
+    const { isFavorite } = req.body;
+
     let workspace = await WorkSpaceModel.findById({ _id: id });
 
     if (!workspace) {

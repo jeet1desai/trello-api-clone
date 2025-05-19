@@ -19,6 +19,6 @@ router.delete('/delete-board/:id', deleteBoardController);
 router.get('/get-board/:id', getBoardController);
 router.get('/get-boards-list/:id', getWorkspaceBoardsController);
 router.get('/get-boards', getBoardsController);
-router.put('/boards/favorite/:boardId', updateFavoriteStatus);
+router.put('/favorite/:boardId', updateFavoriteStatus);
 
 export default router;

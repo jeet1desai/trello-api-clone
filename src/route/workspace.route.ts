@@ -17,6 +17,6 @@ router.put('/update-workspace/:id', updateWorkSpaceController);
 router.delete('/delete-workspace/:id', deleteWorkSpaceController);
 router.get('/get-workspace/:id', getWorkSpaceDetailController);
 router.get('/get-workspaces', getAllWorkSpaceController);
-router.put('/starred-workspace', updateWorkSpaceFavoriteController);
+router.put('/favorite/:id', updateWorkSpaceFavoriteController);
 
 export default router;
