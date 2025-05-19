@@ -5,6 +5,7 @@ import {
   getAllWorkSpaceController,
   getWorkSpaceDetailController,
   updateWorkSpaceController,
+  updateWorkSpaceFavoriteController,
 } from '../controller/workspace.controller';
 import userMiddleware from '../middleware/user.middleware';
 
@@ -16,5 +17,6 @@ router.put('/update-workspace/:id', updateWorkSpaceController);
 router.delete('/delete-workspace/:id', deleteWorkSpaceController);
 router.get('/get-workspace/:id', getWorkSpaceDetailController);
 router.get('/get-workspaces', getAllWorkSpaceController);
+router.put('/starred-workspace', updateWorkSpaceFavoriteController);
 
 export default router;

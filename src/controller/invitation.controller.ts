@@ -175,82 +175,46 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
     let memberEmails: string[] = [];
 
     if (members && members.length > 0) {
-      const invitePromises = members
-        .filter((email: string) => email !== user.email)
-        .map(async (email: string) => {
-          const existingUser = await User.findOne({ email });
+      const invitePromises = members.map(async (email: string) => {
+        if (email === user.email) {
+          APIResponse(res, true, HttpStatusCode.OK, "You can't invite yourself", req.body);
+          return;
+        }
+        const existingUser = await User.findOne({ email });
 
-          const isAlreadyMember = existingUser
-            ? await MemberModel.exists({
-                memberId: existingUser._id,
-                boardId: board._id,
-                workspaceId: workspace._id,
-              })
-            : false;
+        const isAlreadyMember = existingUser
+          ? await MemberModel.exists({
+              memberId: existingUser._id,
+              boardId: board._id,
+              workspaceId: workspace._id,
+            })
+          : false;
 
-          if (isAlreadyMember) {
-            memberEmails.push(email);
-            return;
-          }
+        if (isAlreadyMember) {
+          memberEmails.push(email);
+          return;
+        }
 
-          const existingInvite = await BoardInviteModel.findOne({
-            email,
-            boardId: board._id,
-            workspaceId: workspace._id,
-          });
+        const existingInvite = await BoardInviteModel.findOne({
+          email,
+          boardId: board._id,
+          workspaceId: workspace._id,
+        });
 
-          const isAdmin = invitedBy.role === 'ADMIN';
+        const isAdmin = invitedBy.role === 'ADMIN';
 
-          // If COMPLETED, skip with early return
-          if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.COMPLETED) {
-            skippedEmails.push(email);
-            return;
-          }
+        // If COMPLETED, skip with early return
+        console.log('hello=>', existingInvite);
+        if (existingInvite && existingInvite.status) {
+          skippedEmails.push(email);
+          return;
+        }
 
-          // If REJECTED → Update to PENDING/ADMIN_PENDING
-          if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.REJECTED) {
-            existingInvite.status = isAdmin ? MEMBER_INVITE_STATUS.PENDING : MEMBER_INVITE_STATUS.ADMIN_PENDING;
-            existingInvite.invitedBy = user._id;
-            await existingInvite.save();
-
-            if (isAdmin) {
-              await sendBoardInviteEmail({
-                user,
-                email,
-                existingUser,
-                board,
-                workspace,
-                inviteId: existingInvite._id.toString(),
-              });
-            }
-            return;
-          }
-
-          // If already PENDING → send email if admin
-          if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.PENDING) {
-            if (isAdmin) {
-              await sendBoardInviteEmail({
-                user,
-                email,
-                existingUser,
-                board,
-                workspace,
-                inviteId: existingInvite._id.toString(),
-              });
-            }
-            return;
-          }
-
-          // No invite exists → create new
-          const newInvite = await BoardInviteModel.create({
-            email,
-            role: MEMBER_ROLES.MEMBER,
-            boardId: board._id,
-            invitedBy: user._id,
-            workspaceId: workspace._id,
-            status: isAdmin ? MEMBER_INVITE_STATUS.PENDING : MEMBER_INVITE_STATUS.ADMIN_PENDING,
-            is_approved_by_admin: isAdmin ? false : true,
-          });
+        // If REJECTED → Update to PENDING/ADMIN_PENDING
+        if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.REJECTED) {
+          existingInvite.status = isAdmin ? MEMBER_INVITE_STATUS.PENDING : MEMBER_INVITE_STATUS.ADMIN_PENDING;
+          existingInvite.invitedBy = user._id;
+          await existingInvite.save();
 
           if (isAdmin) {
             await sendBoardInviteEmail({
@@ -259,10 +223,49 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
               existingUser,
               board,
               workspace,
-              inviteId: newInvite._id.toString(),
+              inviteId: existingInvite._id.toString(),
             });
           }
+          return;
+        }
+
+        // If already PENDING → send email if admin
+        if (existingInvite && existingInvite.status === MEMBER_INVITE_STATUS.PENDING) {
+          if (isAdmin) {
+            await sendBoardInviteEmail({
+              user,
+              email,
+              existingUser,
+              board,
+              workspace,
+              inviteId: existingInvite._id.toString(),
+            });
+          }
+          return;
+        }
+
+        // No invite exists → create new
+        const newInvite = await BoardInviteModel.create({
+          email,
+          role: MEMBER_ROLES.MEMBER,
+          boardId: board._id,
+          invitedBy: user._id,
+          workspaceId: workspace._id,
+          status: isAdmin ? MEMBER_INVITE_STATUS.PENDING : MEMBER_INVITE_STATUS.ADMIN_PENDING,
+          is_approved_by_admin: isAdmin ? false : true,
         });
+
+        if (isAdmin) {
+          await sendBoardInviteEmail({
+            user,
+            email,
+            existingUser,
+            board,
+            workspace,
+            inviteId: newInvite._id.toString(),
+          });
+        }
+      });
 
       await Promise.all(invitePromises);
     }

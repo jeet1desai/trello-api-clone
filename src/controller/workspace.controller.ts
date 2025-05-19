@@ -205,3 +205,38 @@ export const getAllWorkSpaceController = async (req: express.Request, res: expre
     }
   }
 };
+
+export const updateWorkSpaceFavoriteController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const { id, isFavorite } = req?.query;
+    // @ts-expect-error
+    const user = req?.user;
+    let workspace = await WorkSpaceModel.findById({ _id: id });
+
+    if (!workspace) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Workspace not found', req.body);
+      return;
+    }
+
+    if (workspace.createdBy.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to perform this task');
+      return;
+    }
+
+    workspace = await WorkSpaceModel.findByIdAndUpdate({ _id: id }, { isFavorite }, { runValidators: true, returnDocument: 'after' });
+
+    await saveRecentActivity(user._id.toString(), 'Updated', 'Workspace', '', [user?._id.toString()], `${user.first_name} updated workspace`);
+
+    APIResponse(
+      res,
+      true,
+      HttpStatusCode.OK,
+      `${isFavorite ? 'Workspace Added to Favorite list' : 'Workspace Removed From Favorite list'}`,
+      workspace
+    );
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};

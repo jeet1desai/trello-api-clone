@@ -6,6 +6,7 @@ export interface WorkspaceModelType {
   description: string;
   createdBy: mongoose.Schema.Types.ObjectId;
   boards: number;
+  isFavorite: boolean;
 }
 
 const schema = new mongoose.Schema<WorkspaceModelType>(
@@ -28,6 +29,10 @@ const schema = new mongoose.Schema<WorkspaceModelType>(
     boards: {
       type: Number,
       default: 0,
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

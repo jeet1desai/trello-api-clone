@@ -622,10 +622,11 @@ export const getBoardsController = async (req: express.Request, res: express.Res
 };
 
 const getBoardListQuery = (userId: string, search: string, sortOption: Record<string, 1 | -1>): PipelineStage[] => {
-  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special chars
+  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex special chars
   const safeSearch = escapeRegex(search);
+
   const pipeline: PipelineStage[] = [
-    // Find boards where the user is a member or admin
+    // Find boards where the user is a member
     {
       $lookup: {
         from: 'members',
@@ -642,7 +643,39 @@ const getBoardListQuery = (userId: string, search: string, sortOption: Record<st
         as: 'membership',
       },
     },
-    { $match: { $expr: { $gt: [{ $size: '$membership' }, 0] } } },
+
+    // Filter boards that have this user as a member
+    {
+      $match: {
+        $expr: { $gt: [{ $size: '$membership' }, 0] },
+      },
+    },
+
+    // Add isFavorite flag for this user
+    {
+      $addFields: {
+        isFavorite: {
+          $cond: [
+            {
+              $gt: [
+                {
+                  $size: {
+                    $filter: {
+                      input: '$membership',
+                      as: 'm',
+                      cond: { $eq: ['$$m.isFavorite', true] },
+                    },
+                  },
+                },
+                0,
+              ],
+            },
+            true,
+            false,
+          ],
+        },
+      },
+    },
 
     // Get all members of the board
     {
@@ -650,30 +683,69 @@ const getBoardListQuery = (userId: string, search: string, sortOption: Record<st
         from: 'members',
         let: { boardId: '$_id' },
         pipeline: [
-          { $match: { $expr: { $eq: ['$boardId', '$$boardId'] } } },
+          {
+            $match: {
+              $expr: { $eq: ['$boardId', '$$boardId'] },
+            },
+          },
           {
             $lookup: {
               from: 'users',
               let: { memberId: '$memberId' },
               pipeline: [
-                { $match: { $expr: { $eq: ['$_id', '$$memberId'] } } },
-                { $project: { _id: 1, first_name: 1, middle_name: 1, last_name: 1, email: 1 } },
+                {
+                  $match: {
+                    $expr: { $eq: ['$_id', '$$memberId'] },
+                  },
+                },
+                {
+                  $project: {
+                    _id: 1,
+                    first_name: 1,
+                    middle_name: 1,
+                    last_name: 1,
+                    email: 1,
+                  },
+                },
               ],
               as: 'user',
             },
           },
-          { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
-          { $project: { _id: 1, role: 1, user: 1 } },
+          {
+            $unwind: {
+              path: '$user',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              role: 1,
+              user: 1,
+            },
+          },
         ],
         as: 'members',
       },
     },
 
-    // Lookup workspace details
-    { $lookup: { from: 'workspaces', localField: 'workspaceId', foreignField: '_id', as: 'workspace' } },
-    { $unwind: { path: '$workspace', preserveNullAndEmptyArrays: true } },
+    // Get workspace details
+    {
+      $lookup: {
+        from: 'workspaces',
+        localField: 'workspaceId',
+        foreignField: '_id',
+        as: 'workspace',
+      },
+    },
+    {
+      $unwind: {
+        path: '$workspace',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
 
-    // Apply search filter if present
+    // Apply search filter if provided
     ...(search
       ? [
           {
@@ -684,12 +756,60 @@ const getBoardListQuery = (userId: string, search: string, sortOption: Record<st
         ]
       : []),
 
-    // Sort the result based on sortOption
-    { $sort: sortOption },
+    // Sort
+    {
+      $sort: sortOption,
+    },
 
-    // Project the desired fields
-    { $project: { _id: 1, name: 1, description: 1, createdAt: 1, members: 1, workspace: 1 } },
+    // Final projection
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        description: 1,
+        createdAt: 1,
+        members: 1,
+        workspace: 1,
+        isFavorite: 1,
+      },
+    },
   ];
 
   return pipeline;
+};
+
+export const updateFavoriteStatus = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const { boardId } = req.params;
+    const { isFavorite } = req.body;
+    // @ts-expect-error
+    const userId = req.user._id; // assuming you're using a middleware that sets req.user
+
+    if (!mongoose.Types.ObjectId.isValid(boardId)) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid board ID');
+      return;
+    }
+
+    const updated = await MemberModel.findOneAndUpdate(
+      {
+        boardId,
+        memberId: userId,
+      },
+      {
+        $set: { isFavorite },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Member not found');
+      return;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Favorite status updated successfully', updated);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
 };
