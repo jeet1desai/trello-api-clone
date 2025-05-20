@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { BOARD_BACKGROUND_TYPE } from '../config/app.config';
 
 export interface BoardModelType {
   _id?: mongoose.Schema.Types.ObjectId;
@@ -6,6 +7,8 @@ export interface BoardModelType {
   description?: string;
   createdBy?: mongoose.Types.ObjectId;
   workspaceId?: mongoose.Types.ObjectId;
+  backgroundType: string;
+  background: string;
 }
 
 const schema = new mongoose.Schema<BoardModelType>(
@@ -28,6 +31,16 @@ const schema = new mongoose.Schema<BoardModelType>(
       type: mongoose.Schema.Types.ObjectId,
       default: '',
       ref: 'workspaces',
+    },
+    backgroundType: {
+      type: String,
+      upperCase: true,
+      default: BOARD_BACKGROUND_TYPE.COLOR,
+      enum: BOARD_BACKGROUND_TYPE,
+    },
+    background: {
+      type: String,
+      default: '#FFF',
     },
   },
   { timestamps: true }
