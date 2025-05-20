@@ -7,6 +7,7 @@ export interface MemberModelType {
   role?: MEMBER_ROLES;
   boardId?: mongoose.Schema.Types.ObjectId;
   workspaceId?: mongoose.Schema.Types.ObjectId;
+  isFavorite: boolean;
 }
 
 const schema = new mongoose.Schema<MemberModelType>(
@@ -31,6 +32,10 @@ const schema = new mongoose.Schema<MemberModelType>(
       type: mongoose.Schema.Types.ObjectId,
       default: '',
       ref: 'workspaces',
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
