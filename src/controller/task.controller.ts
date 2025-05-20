@@ -1,6 +1,6 @@
 import { Request, Response, RequestHandler, NextFunction } from 'express';
 import APIResponse from '../helper/apiResponse';
-import { HttpStatusCode } from '../helper/enum';
+import { HttpStatusCode, TaskStatus } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
@@ -25,6 +25,10 @@ type BaseQuery = {
 
 type FilterQuery = BaseQuery & {
   $or?: Array<{ assigned_to: string | { $in: string[] } } | { created_by: string | { $in: string[] } } | { _id: { $in: string[] } }>;
+  $and?: Array<{ _id: { $in: string[] } } | { $or: Array<any> } | Record<string, any>>;
+  status?: string;
+  end_date?: { $ne: null } | null | { $lt: Date, $ne: null } | { $gte: Date, $lt: Date, $ne: null };
+  _id?: { $in: string[] };
 };
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -74,7 +78,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const user = req?.user;
     const currentUserId = user._id;
 
-    const { statusId, filterBy: filterByRaw } = req.body;
+    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds } = req.body;
 
     if (!statusId || typeof statusId !== 'string' || !statusId.trim()) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Missing or invalid 'statusId' parameter.");
@@ -106,6 +110,56 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
       status_list_id: statusId,
     };
 
+    // Add filter for markAsDone if provided
+    if (markAsDone && markAsDone !== undefined) {
+      query.status = markAsDone === true ? TaskStatus.COMPLETED : TaskStatus.INCOMPLETE;
+    }
+
+    // Add filter for due date presence if provided
+    if (hasDueDate !== undefined) {
+      if (hasDueDate === true) {
+        query.end_date = { $ne: null };
+      } else {
+        query.end_date = null;
+      }
+    }
+    if (hasOverDue !== undefined) {
+      if (hasOverDue === true) {
+        const now = new Date();
+        query.end_date = { $lt: now, $ne: null };
+      } else {
+        query.end_date = null;
+      }
+    }
+
+    if (dueTimeframe && query.end_date !== null) {
+      const now = new Date();
+      let startDate = new Date(now);
+      let endDate: Date;
+
+      switch (dueTimeframe) {
+        case 'day':
+          endDate = new Date(now);
+          endDate.setDate(endDate.getDate() + 2);
+          break;
+        case 'week':
+          endDate = new Date(now);
+          endDate.setDate(endDate.getDate() + 7);
+          break;
+        case 'month':
+          endDate = new Date(now);
+          endDate.setDate(endDate.getDate() + 30);
+          break;
+        default:
+          endDate = new Date(now);
+          endDate.setDate(endDate.getDate() + 1);
+      }
+
+      query.end_date = {
+        $gte: startDate, $lt: endDate, $ne: null
+      };
+    }
+
     if (!isAll) {
       query.$or = [];
 
@@ -120,7 +174,24 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
       }
     }
 
-    // 3. Fetch tasks
+    let taskIds: string[] = [];
+    if (labelIds && Array.isArray(labelIds) && labelIds.length > 0) {
+      const taskLabels = await TaskLabelModel.find({
+        label_id: { $in: labelIds.map(id => mongoose.Types.ObjectId.isValid(id) ? id : null).filter(Boolean) }
+      }).select('task_id');
+
+      taskIds = taskLabels.map(tl => tl.task_id?.toString()).filter((id): id is string => Boolean(id));
+
+      if (taskIds.length > 0) {
+        if (query.$or) {
+          query.$and = [{ _id: { $in: taskIds } }, { $or: query.$or }];
+          delete query.$or;
+        } else {
+          query._id = { $in: taskIds };
+        }
+      }
+    }
+
     const tasks = await TaskModel.find(query)
       .sort({ position: 1 })
       .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')

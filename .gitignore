@@ -28,3 +28,6 @@ logs
 # Test case
 .nyc_output/
 coverage/
+
+# 
+dist
