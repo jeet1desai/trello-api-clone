@@ -737,3 +737,81 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
     return next(err);
   }
 };
+
+export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    //@ts-expect-error
+    const user = req?.user;
+
+    // Get all boards where user is a member
+    const memberBoards = await MemberModel.find({ memberId: user._id }).select('boardId');
+    const boardIds = memberBoards.map(member => member.boardId);
+
+    if (boardIds.length === 0) {
+      APIResponse(res, true, HttpStatusCode.OK, 'No boards found for the user', []);
+      return;
+    }
+
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now);
+    sevenDaysFromNow.setDate(now.getDate() + 7);
+
+    const query = {
+      board_id: { $in: boardIds },
+      end_date: {
+        $gte: now,
+        $lte: sevenDaysFromNow,
+        $ne: null
+      },
+      status: { $ne: TaskStatus.COMPLETED },
+      $or: [
+        { assigned_to: user._id },
+        { created_by: user._id }
+      ]
+    };
+
+    const tasks = await TaskModel.find(query)
+      .sort({ end_date: 1 })
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
+      .populate({
+        path: 'status_list_id',
+        select: '_id name description board_id',
+        populate: [
+          {
+            path: 'board_id',
+            model: 'boards',
+            select: '_id name description',
+          },
+        ],
+      })
+      .populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
+      });
+
+    // Enhance task details with labels and comment count
+    const taskList = await Promise.all(
+      tasks.map(async (task) => {
+        const [taskLabels, commentCount] = await Promise.all([
+          TaskLabelModel.find({ task_id: task._id }).populate({
+            path: 'label_id',
+            select: '_id name backgroundColor textColor boardId',
+          }),
+          CommentModel.countDocuments({ task_id: task._id }),
+        ]);
+
+        return {
+          ...task.toObject(),
+          labels: taskLabels.map((tl) => tl.label_id),
+          comments: commentCount,
+        };
+      })
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Upcoming deadline tasks successfully fetched', taskList);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
