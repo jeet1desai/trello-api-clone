@@ -25,10 +25,10 @@ type BaseQuery = {
 
 type FilterQuery = BaseQuery & {
   $or?: Array<{ assigned_to: string | { $in: string[] } } | { created_by: string | { $in: string[] } } | { _id: { $in: string[] } }>;
-  $and?: Array<{ _id: { $in: string[] } } | { $or: Array<any> } | Record<string, any>>;
+  $and?: Array<{ _id: { $in: string[] } | { $nin: string[] } } | { $or: Array<any> } | Record<string, any>>;
   status?: string;
   end_date?: { $ne: null } | null | { $lt: Date, $ne: null } | { $gte: Date, $lt: Date, $ne: null };
-  _id?: { $in: string[] };
+  _id?: { $in: string[] } | { $nin: string[] };
 };
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -78,7 +78,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const user = req?.user;
     const currentUserId = user._id;
 
-    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds } = req.body;
+    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds, hasMember } = req.body;
 
     if (!statusId || typeof statusId !== 'string' || !statusId.trim()) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Missing or invalid 'statusId' parameter.");
@@ -171,6 +171,20 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
           { created_by: { $in: resolvedFilterBy } },
           { _id: { $in: taskIdsWithMembership } }
         );
+      }
+    }
+
+    if (hasMember !== undefined) {
+      if (hasMember === false) {
+        const tasksWithMembers = await TaskMemberModel.find().select('task_id');
+        const taskIdsWithMembers = tasksWithMembers.map(m => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+        
+        if (query.$or) {
+          query.$and = [{ _id: { $nin: taskIdsWithMembers } }, { $or: query.$or }];
+          delete query.$or;
+        } else {
+          query._id = { $nin: taskIdsWithMembers };
+        }
       }
     }
 
