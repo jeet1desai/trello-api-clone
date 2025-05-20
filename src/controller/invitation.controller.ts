@@ -204,7 +204,6 @@ export const sendInvitationDetailController = async (req: express.Request, res: 
         const isAdmin = invitedBy.role === 'ADMIN';
 
         // If COMPLETED, skip with early return
-        console.log('hello=>', existingInvite);
         if (existingInvite && existingInvite.status) {
           skippedEmails.push(email);
           return;

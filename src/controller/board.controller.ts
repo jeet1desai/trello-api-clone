@@ -790,6 +790,20 @@ export const updateFavoriteStatus = async (req: express.Request, res: express.Re
       return;
     }
 
+    // Validate isFavorite
+    if (typeof isFavorite !== 'boolean') {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, '`isFavorite` must be a boolean value');
+      return;
+    }
+
+    // Check if board exists
+    const boardExists = await BoardModel.exists({ _id: boardId });
+    if (!boardExists) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found');
+      return;
+    }
+
+    // Check if the user is a member of this board
     const updated = await MemberModel.findOneAndUpdate(
       {
         boardId,
@@ -802,11 +816,11 @@ export const updateFavoriteStatus = async (req: express.Request, res: express.Re
     );
 
     if (!updated) {
-      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Member not found');
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not a member of this board');
       return;
     }
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Favorite status updated successfully', updated);
+    APIResponse(res, true, HttpStatusCode.OK, `${isFavorite ? 'Board Added to Favorite list' : 'Board Removed From Favorite list'}`, updated);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
