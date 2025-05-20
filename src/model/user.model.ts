@@ -46,6 +46,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: 'base-app-user',
     },
+    is_password_available: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

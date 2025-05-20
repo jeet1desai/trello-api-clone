@@ -10,6 +10,7 @@ import {
   loginSchema,
   refreshTokenSchema,
   resetPasswordSchema,
+  resetPasswordSchemaForSocialMediaUser,
   signupSchema,
 } from '../schemas/auth.schema';
 import Joi from 'joi';
@@ -133,6 +134,7 @@ const Signin: RequestHandler = async (request: Request, response: Response, next
       email: user.email,
       profile_image: user.profile_image,
       status: user.status,
+      is_password_available: user.is_password_available,
     };
 
     const { accessToken, refreshToken } = await generateTokens(tokenData);
@@ -321,29 +323,29 @@ const ResetPassword: RequestHandler = async (request: Request, response: Respons
   try {
     const reqBody = await request.body;
     const { old_password, new_password } = reqBody;
-    await validateRequest(reqBody, resetPasswordSchema);
     const user = (request as any)?.user;
-
+    await validateRequest(reqBody, user.password ? resetPasswordSchema : resetPasswordSchemaForSocialMediaUser);
     if (!user) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'User not found..!');
       return;
     }
 
-    if (!user.password) {
-      APIResponse(response, false, HttpStatusCode.BAD_REQUEST, 'Unable to reset password..!');
-      return;
-    }
-
-    const validateOldPassword = await bcryptJS.compare(old_password, user.password);
-    if (!validateOldPassword) {
-      APIResponse(response, false, 401, 'Incorrect old password. If you forgot your current password, please use the "Forgot Password" option..!');
-      return;
+    if (user.password) {
+      const validateOldPassword = await bcryptJS.compare(old_password, user.password);
+      if (!validateOldPassword) {
+        APIResponse(response, false, 401, 'Incorrect old password. If you forgot your current password, please use the "Forgot Password" option..!');
+        return;
+      }
     }
 
     const salt = await bcryptJS.genSalt(10);
     const hashedPassword = await bcryptJS.hash(new_password, salt);
 
-    const newuser = await User.findByIdAndUpdate({ _id: user._id }, { password: hashedPassword }, { runValidators: true, returnDocument: 'after' });
+    const newuser = await User.findByIdAndUpdate(
+      { _id: user._id },
+      { password: hashedPassword, is_password_available: true },
+      { runValidators: true, returnDocument: 'after' }
+    );
 
     if (!newuser) {
       APIResponse(response, false, HttpStatusCode.NOT_FOUND, 'User not found..!');
@@ -414,7 +416,8 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
         profile_image: profile_image,
         status: true,
         is_email_verified: true,
-        provider: provider, // Store the provider
+        provider: provider,
+        is_password_available: Boolean(user?.password),
       });
     }
 
@@ -435,6 +438,7 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
       email: user.email,
       profile_image: user.profile_image,
       status: user.status,
+      is_password_available: user.is_password_available,
     };
 
     const { accessToken, refreshToken } = await generateTokens(tokenData);

@@ -74,3 +74,10 @@ export const resetPasswordSchema = Joi.object({
     'any.required': 'New password is required',
   }),
 });
+
+export const resetPasswordSchemaForSocialMediaUser = Joi.object({
+  new_password: Joi.string().required().messages({
+    'string.empty': 'New password is required',
+    'any.required': 'New password is required',
+  }),
+});

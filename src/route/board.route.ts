@@ -7,6 +7,7 @@ import {
   getBoardsController,
   getWorkspaceBoardsController,
   updateBoardController,
+  updateFavoriteStatus,
 } from '../controller/board.controller';
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.delete('/delete-board/:id', deleteBoardController);
 router.get('/get-board/:id', getBoardController);
 router.get('/get-boards-list/:id', getWorkspaceBoardsController);
 router.get('/get-boards', getBoardsController);
+router.put('/favorite/:boardId', updateFavoriteStatus);
 
 export default router;
