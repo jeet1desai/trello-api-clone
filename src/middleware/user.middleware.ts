@@ -1,5 +1,5 @@
 import express from 'express';
-import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
+import { TOKEN_EXP } from '../config/app.config';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
@@ -36,8 +36,9 @@ const refetchToken = async (token: string) => {
 };
 
 export default async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const accessToken = req?.cookies?.access_token || '';
-  const refreshToken = req?.cookies?.refresh_token || '';
+  const authHeader = req.headers.authorization;
+  const accessToken = authHeader?.split(' ')[1] || '';
+  const refreshToken = req.headers['x-refresh-token'] as string || '';
 
   try {
     if (!accessToken) {
@@ -74,7 +75,9 @@ export default async (req: express.Request, res: express.Response, next: express
           APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
           return;
         }
-        res.cookie('access_token', newAccessToken, COOKIE_OPTIONS);
+        
+        // Set new access token in response header
+        res.setHeader('x-access-token', newAccessToken);
 
         // @ts-expect-error
         req.user = user;
