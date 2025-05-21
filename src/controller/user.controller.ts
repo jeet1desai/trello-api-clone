@@ -6,6 +6,8 @@ import { deleteFromCloudinary, saveFileToCloud } from '../utils/cloudinaryFileUp
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
 import { getResourceType } from '../helper/getResourceType';
+import { BoardModel } from '../model/board.model';
+import { BOARD_BACKGROUND_TYPE } from '../config/app.config';
 
 export const getUserProfileHandler = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -104,7 +106,7 @@ export const uploadCustomBoardImages = async (req: express.Request, res: express
 
 export const deleteUserBoardBackgroundImage = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const { imageId } = req.query;
+    const { imageId, boardId } = req.query;
     // @ts-expect-error
     const userId = req.user?._id;
 
@@ -114,15 +116,30 @@ export const deleteUserBoardBackgroundImage = async (req: express.Request, res: 
     }
 
     const image = await UserBoardBackgroundModel.findOne({ _id: imageId, userId });
-
     if (!image) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Image not found');
       return;
     }
 
+    // 1. Check if the board exists
+    const board = await BoardModel.findById(boardId);
+    if (!board) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found');
+      return;
+    }
+
+    // 2. If the board is using this image as its background, reset it to default
+    if (board.background === image.imageUrl) {
+      board.backgroundType = BOARD_BACKGROUND_TYPE.COLOR;
+      board.background = '#FFF';
+      await board.save();
+    }
+
+    // 3. Delete the image from Cloudinary
     const resourceType = await getResourceType(image.imageName);
     await deleteFromCloudinary(image.imageId, resourceType);
 
+    // 4. Delete the image from DB
     await UserBoardBackgroundModel.deleteOne({ _id: imageId });
 
     APIResponse(res, true, HttpStatusCode.OK, 'User Board Background Image deleted successfully');
