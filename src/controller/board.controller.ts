@@ -916,10 +916,14 @@ export const updateBoardBackground = async (req: express.Request, res: express.R
         break;
     }
 
-    const board = await BoardModel.findByIdAndUpdate(boardId, {
-      backgroundType,
-      background: backgroundValue,
-    });
+    const board = await BoardModel.findByIdAndUpdate(
+      boardId,
+      {
+        backgroundType,
+        background: backgroundValue,
+      },
+      { new: true }
+    );
 
     if (!board) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found.');
@@ -927,7 +931,7 @@ export const updateBoardBackground = async (req: express.Request, res: express.R
     }
 
     APIResponse(res, true, HttpStatusCode.OK, 'Board background updated successfully.', board);
-  } catch (error) {
-    APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, 'Something went wrong.');
+  } catch (err) {
+    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err instanceof Error ? err.message : 'Something went wrong');
   }
 };
