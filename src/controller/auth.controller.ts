@@ -1,5 +1,5 @@
 import { Request, Response, RequestHandler, NextFunction } from 'express';
-import APIResponse, { sendWithCookie } from '../helper/apiResponse';
+import APIResponse from '../helper/apiResponse';
 import User from '../model/user.model';
 import bcryptJS from 'bcryptjs';
 import { HttpStatusCode } from '../helper/enum';
@@ -139,8 +139,7 @@ const Signin: RequestHandler = async (request: Request, response: Response, next
 
     const { accessToken, refreshToken } = await generateTokens(tokenData);
 
-    sendWithCookie({ res: response, message: 'Login successful..!', status: 200, data: { user: userData, accessToken, refreshToken } });
-    return;
+    APIResponse(response, true, HttpStatusCode.OK, 'Login successful..!', { user: userData, accessToken, refreshToken });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
@@ -163,12 +162,7 @@ const RefreshToken: RequestHandler = async (request: Request, response: Response
     const accessToken = jwt.sign(payload, process.env.TOKEN_PRIVATE_KEY as string, { expiresIn: TOKEN_EXP.access_token as any });
     const user = await User.findById({ _id: verifyToken.tokenDetails._id }).select('_id first_name middle_name last_name email profile_image status');
 
-    sendWithCookie({
-      res: response,
-      message: 'Access token created successfully',
-      status: 200,
-      data: { user, accessToken, refreshToken: reqBody.refreshToken },
-    });
+    APIResponse(response, true, HttpStatusCode.OK, 'Access token created successfully', { user, accessToken, refreshToken: reqBody.refreshToken });
   } catch (error: unknown) {
     if (error instanceof Joi.ValidationError) {
       APIResponse(response, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
@@ -376,7 +370,7 @@ const logoutHandler: RequestHandler = async (request: Request, response: Respons
   }
 };
 
-const firebaseSocialLogin: RequestHandler = async (request: Request, response: Response, next: NextFunction) => {
+const firebaseSocialLogin: any = async (request: Request, response: Response, next: NextFunction) => {
   try {
     const { idToken, screenName } = request.body;
 
@@ -443,12 +437,7 @@ const firebaseSocialLogin: RequestHandler = async (request: Request, response: R
 
     const { accessToken, refreshToken } = await generateTokens(tokenData);
 
-    return sendWithCookie({
-      res: response,
-      message: 'Login successful..!',
-      status: 200,
-      data: { user: userData, accessToken, refreshToken },
-    });
+    return APIResponse(response, true, HttpStatusCode.OK, 'Login successful..!', { user: userData, accessToken, refreshToken });
   } catch (error: any) {
     console.error('Firebase login error:', error?.message || error);
     return next(error);
