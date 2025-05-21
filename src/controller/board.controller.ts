@@ -23,6 +23,7 @@ import { TaskModel } from '../model/task.model';
 import { TaskLabelModel } from '../model/taskLabel.model';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { BoardBackgroundModel } from '../model/boardBackground.model';
+import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -860,5 +861,73 @@ export const boardBackgrounds = async (req: express.Request, res: express.Respon
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
+  }
+};
+
+export const updateBoardBackground = async (req: express.Request, res: express.Response) => {
+  try {
+    const { boardId, backgroundType, background, imageId } = req.body;
+    // @ts-expect-error
+    const user = req.user;
+
+    if (!boardId || !backgroundType) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'boardId and backgroundType are required.');
+      return;
+    }
+
+    if (!Object.values(BOARD_BACKGROUND_TYPE).includes(backgroundType)) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid backgroundType.');
+      return;
+    }
+
+    const isMember = await MemberModel.exists({ boardId, memberId: user._id });
+    if (!isMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You are not a member of this board.');
+      return;
+    }
+
+    let backgroundValue = background;
+
+    switch (backgroundType) {
+      case BOARD_BACKGROUND_TYPE.CUSTOM:
+        if (imageId) {
+          const userImage = await UserBoardBackgroundModel.findOne({ _id: imageId, userId: user._id }).lean();
+          if (!userImage) {
+            APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Image not found or not owned by user.');
+            return;
+          }
+          backgroundValue = userImage.imageUrl;
+        }
+        break;
+
+      case BOARD_BACKGROUND_TYPE.IMAGE:
+        if (imageId) {
+          const image = await BoardBackgroundModel.findOne({ _id: imageId }).lean();
+          if (!image) {
+            APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board background image not found.');
+            return;
+          }
+          backgroundValue = image.imageUrl;
+        }
+        break;
+
+      case BOARD_BACKGROUND_TYPE.COLOR:
+        backgroundValue = backgroundValue || '#FFF';
+        break;
+    }
+
+    const board = await BoardModel.findByIdAndUpdate(boardId, {
+      backgroundType,
+      background: backgroundValue,
+    });
+
+    if (!board) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found.');
+      return;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Board background updated successfully.', board);
+  } catch (error) {
+    APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, 'Something went wrong.');
   }
 };
