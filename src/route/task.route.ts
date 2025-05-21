@@ -8,6 +8,7 @@ import {
   getAttachmentHandler,
   getTaskByIdHandler,
   getTaskByStatusIdHandler,
+  getUpcomingDeadlineTasksHandler,
   updateTaskHandler,
   uploadAttachmentHandler,
 } from '../controller/task.controller';
@@ -19,6 +20,7 @@ taskRouter.use(userMiddleware);
 taskRouter.post('/create-task', createTaskHandler);
 taskRouter.post('/duplicate-task', duplicateTaskHandler);
 taskRouter.post('/get-task', getTaskByStatusIdHandler);
+taskRouter.get('/upcoming-deadlines', getUpcomingDeadlineTasksHandler);
 taskRouter.get('/get-task/:id', getTaskByIdHandler);
 taskRouter.put('/update-task', updateTaskHandler);
 taskRouter.delete('/delete-task/:id', deleteTaskHandler);

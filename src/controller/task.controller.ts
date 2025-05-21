@@ -25,10 +25,10 @@ type BaseQuery = {
 
 type FilterQuery = BaseQuery & {
   $or?: Array<{ assigned_to: string | { $in: string[] } } | { created_by: string | { $in: string[] } } | { _id: { $in: string[] } }>;
-  $and?: Array<{ _id: { $in: string[] } } | { $or: Array<any> } | Record<string, any>>;
+  $and?: Array<{ _id: { $in: string[] } | { $nin: string[] } } | { $or: Array<any> } | Record<string, any>>;
   status?: string;
   end_date?: { $ne: null } | null | { $lt: Date, $ne: null } | { $gte: Date, $lt: Date, $ne: null };
-  _id?: { $in: string[] };
+  _id?: { $in: string[] } | { $nin: string[] };
 };
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -78,7 +78,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const user = req?.user;
     const currentUserId = user._id;
 
-    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds } = req.body;
+    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds, hasMember } = req.body;
 
     if (!statusId || typeof statusId !== 'string' || !statusId.trim()) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Missing or invalid 'statusId' parameter.");
@@ -171,6 +171,20 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
           { created_by: { $in: resolvedFilterBy } },
           { _id: { $in: taskIdsWithMembership } }
         );
+      }
+    }
+
+    if (hasMember !== undefined) {
+      if (hasMember === false) {
+        const tasksWithMembers = await TaskMemberModel.find().select('task_id');
+        const taskIdsWithMembers = tasksWithMembers.map(m => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+        
+        if (query.$or) {
+          query.$and = [{ _id: { $nin: taskIdsWithMembers } }, { $or: query.$or }];
+          delete query.$or;
+        } else {
+          query._id = { $nin: taskIdsWithMembers };
+        }
       }
     }
 
@@ -721,5 +735,83 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
       APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
     }
     return next(err);
+  }
+};
+
+export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    //@ts-expect-error
+    const user = req?.user;
+
+    // Get all boards where user is a member
+    const memberBoards = await MemberModel.find({ memberId: user._id }).select('boardId');
+    const boardIds = memberBoards.map(member => member.boardId);
+
+    if (boardIds.length === 0) {
+      APIResponse(res, true, HttpStatusCode.OK, 'No boards found for the user', []);
+      return;
+    }
+
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now);
+    sevenDaysFromNow.setDate(now.getDate() + 7);
+
+    const query = {
+      board_id: { $in: boardIds },
+      end_date: {
+        $gte: now,
+        $lte: sevenDaysFromNow,
+        $ne: null
+      },
+      status: { $ne: TaskStatus.COMPLETED },
+      $or: [
+        { assigned_to: user._id },
+        { created_by: user._id }
+      ]
+    };
+
+    const tasks = await TaskModel.find(query)
+      .sort({ end_date: 1 })
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
+      .populate({
+        path: 'status_list_id',
+        select: '_id name description board_id',
+        populate: [
+          {
+            path: 'board_id',
+            model: 'boards',
+            select: '_id name description',
+          },
+        ],
+      })
+      .populate({
+        path: 'assigned_to',
+        select: '_id first_name last_name',
+      });
+
+    // Enhance task details with labels and comment count
+    const taskList = await Promise.all(
+      tasks.map(async (task) => {
+        const [taskLabels, commentCount] = await Promise.all([
+          TaskLabelModel.find({ task_id: task._id }).populate({
+            path: 'label_id',
+            select: '_id name backgroundColor textColor boardId',
+          }),
+          CommentModel.countDocuments({ task_id: task._id }),
+        ]);
+
+        return {
+          ...task.toObject(),
+          labels: taskLabels.map((tl) => tl.label_id),
+          comments: commentCount,
+        };
+      })
+    );
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Upcoming deadline tasks successfully fetched', taskList);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
   }
 };
