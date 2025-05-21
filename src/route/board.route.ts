@@ -8,6 +8,8 @@ import {
   getWorkspaceBoardsController,
   updateBoardController,
   updateFavoriteStatus,
+  boardBackgrounds,
+  updateBoardBackground,
 } from '../controller/board.controller';
 
 const router = express.Router();
@@ -20,5 +22,7 @@ router.get('/get-board/:id', getBoardController);
 router.get('/get-boards-list/:id', getWorkspaceBoardsController);
 router.get('/get-boards', getBoardsController);
 router.put('/favorite/:boardId', updateFavoriteStatus);
+router.get('/backgrounds', boardBackgrounds);
+router.put('/update-background', updateBoardBackground);
 
 export default router;

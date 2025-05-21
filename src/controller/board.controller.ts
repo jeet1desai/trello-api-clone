@@ -6,7 +6,7 @@ import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import mongoose, { PipelineStage } from 'mongoose';
 import { BoardModel } from '../model/board.model';
-import { convertObjectId, getSortOption, MEMBER_INVITE_STATUS, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
+import { BOARD_BACKGROUND_TYPE, convertObjectId, getSortOption, MEMBER_INVITE_STATUS, MEMBER_ROLES, SORT_TYPE } from '../config/app.config';
 import { WorkSpaceModel } from '../model/workspace.model';
 import { MemberModel } from '../model/members.model';
 import User from '../model/user.model';
@@ -22,6 +22,8 @@ import { StatusModel } from '../model/status.model';
 import { TaskModel } from '../model/task.model';
 import { TaskLabelModel } from '../model/taskLabel.model';
 import { TaskMemberModel } from '../model/taskMember.model';
+import { BoardBackgroundModel } from '../model/boardBackground.model';
+import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -369,7 +371,7 @@ export const getBoardController = async (req: express.Request, res: express.Resp
     // @ts-expect-error
     const user = req.user;
     const { id } = req.params;
-
+    console.log('called', id);
     const [board] = await BoardModel.aggregate(getBoardDetailsQuery(id));
 
     if (!board) {
@@ -455,6 +457,27 @@ const getBoardDetailsQuery = (boardId: string): PipelineStage[] => {
           { $project: { _id: 1, name: 1, workspaceOwner: 1 } },
         ],
         as: 'workspace',
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        description: 1,
+        createdBy: 1,
+        boardOwner: 1,
+        workspaceId: 1,
+        workspace: 1,
+        members: 1,
+        background: {
+          $ifNull: ['$background', '#FFF'],
+        },
+        backgroundType: {
+          $ifNull: ['$backgroundType', BOARD_BACKGROUND_TYPE.COLOR],
+        },
+        createdAt: 1,
+        updatedAt: 1,
+        __v: 1,
       },
     },
   ];
@@ -825,5 +848,89 @@ export const updateFavoriteStatus = async (req: express.Request, res: express.Re
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
+  }
+};
+
+export const boardBackgrounds = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const boardBackground = await BoardBackgroundModel.find().lean();
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Board Background fetch successfully', boardBackground);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const updateBoardBackground = async (req: express.Request, res: express.Response) => {
+  try {
+    const { boardId, backgroundType, background, imageId } = req.body;
+    // @ts-expect-error
+    const user = req.user;
+
+    if (!boardId || !backgroundType) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'boardId and backgroundType are required.');
+      return;
+    }
+
+    if (!Object.values(BOARD_BACKGROUND_TYPE).includes(backgroundType)) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid backgroundType.');
+      return;
+    }
+
+    const isMember = await MemberModel.exists({ boardId, memberId: user._id });
+    if (!isMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You are not a member of this board.');
+      return;
+    }
+
+    let backgroundValue = background;
+
+    switch (backgroundType) {
+      case BOARD_BACKGROUND_TYPE.CUSTOM:
+        if (imageId) {
+          const userImage = await UserBoardBackgroundModel.findOne({ _id: imageId, userId: user._id }).lean();
+          if (!userImage) {
+            APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Image not found or not owned by user.');
+            return;
+          }
+          backgroundValue = userImage.imageUrl;
+        }
+        break;
+
+      case BOARD_BACKGROUND_TYPE.IMAGE:
+        if (imageId) {
+          const image = await BoardBackgroundModel.findOne({ _id: imageId }).lean();
+          if (!image) {
+            APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board background image not found.');
+            return;
+          }
+          backgroundValue = image.imageUrl;
+        }
+        break;
+
+      case BOARD_BACKGROUND_TYPE.COLOR:
+        backgroundValue = backgroundValue || '#FFF';
+        break;
+    }
+
+    const board = await BoardModel.findByIdAndUpdate(
+      boardId,
+      {
+        backgroundType,
+        background: backgroundValue,
+      },
+      { new: true }
+    );
+
+    if (!board) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found.');
+      return;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Board background updated successfully.', board);
+  } catch (err) {
+    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err instanceof Error ? err.message : 'Something went wrong');
   }
 };

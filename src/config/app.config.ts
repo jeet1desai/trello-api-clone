@@ -27,6 +27,12 @@ export enum MEMBER_INVITE_STATUS {
   ADMIN_REJECTED = 'ADMIN_REJECTED',
 }
 
+export enum BOARD_BACKGROUND_TYPE {
+  IMAGE = 'IMAGE',
+  COLOR = 'COLOR',
+  CUSTOM = 'CUSTOM',
+}
+
 export enum SORT_TYPE {
   NameAsc = 1,
   NameDesc = 2,

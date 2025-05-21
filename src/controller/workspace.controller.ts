@@ -16,8 +16,8 @@ import { getPagination } from '../utils/pagination';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const encrypted = req.body.data;
-    const decrypted = JSON.parse(decrypt(encrypted));
+    const encrypted = req.body;
+    const decrypted = decrypt(encrypted);
 
     await validateRequest(decrypted, createWorkspaceSchema);
 
