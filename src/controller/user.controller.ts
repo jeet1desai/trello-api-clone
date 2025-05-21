@@ -84,10 +84,8 @@ export const uploadCustomBoardImages = async (req: express.Request, res: express
       return;
     }
 
-    // Upload images to Cloudinary (or your image storage)
     const uploadResponse = await saveMultipleFilesToCloud(attachments, 'user_board_backgrounds');
 
-    // Map and prepare data for DB
     const boardBackgrounds = uploadResponse.map((result: { imageId: string; imageName: string; url: string }) => ({
       imageId: result.imageId,
       imageUrl: result.url,
@@ -95,7 +93,6 @@ export const uploadCustomBoardImages = async (req: express.Request, res: express
       userId,
     }));
 
-    // Save all entries
     const savedImages = await UserBoardBackgroundModel.insertMany(boardBackgrounds);
 
     APIResponse(res, true, HttpStatusCode.OK, 'User Board background images uploaded successfully', savedImages);
@@ -121,25 +118,21 @@ export const deleteUserBoardBackgroundImage = async (req: express.Request, res: 
       return;
     }
 
-    // 1. Check if the board exists
     const board = await BoardModel.findById(boardId);
     if (!board) {
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found');
       return;
     }
 
-    // 2. If the board is using this image as its background, reset it to default
     if (board.background === image.imageUrl) {
       board.backgroundType = BOARD_BACKGROUND_TYPE.COLOR;
       board.background = '#FFF';
       await board.save();
     }
 
-    // 3. Delete the image from Cloudinary
     const resourceType = await getResourceType(image.imageName);
     await deleteFromCloudinary(image.imageId, resourceType);
 
-    // 4. Delete the image from DB
     await UserBoardBackgroundModel.deleteOne({ _id: imageId });
 
     APIResponse(res, true, HttpStatusCode.OK, 'User Board Background Image deleted successfully');

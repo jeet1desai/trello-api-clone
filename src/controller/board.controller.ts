@@ -459,7 +459,6 @@ const getBoardDetailsQuery = (boardId: string): PipelineStage[] => {
         as: 'workspace',
       },
     },
-    // ✅ Add this final stage
     {
       $project: {
         _id: 1,
@@ -471,10 +470,10 @@ const getBoardDetailsQuery = (boardId: string): PipelineStage[] => {
         workspace: 1,
         members: 1,
         background: {
-          $ifNull: ['$background', '#FFF'], // default background color
+          $ifNull: ['$background', '#FFF'],
         },
         backgroundType: {
-          $ifNull: ['$backgroundType', BOARD_BACKGROUND_TYPE.COLOR], // default background type
+          $ifNull: ['$backgroundType', BOARD_BACKGROUND_TYPE.COLOR],
         },
         createdAt: 1,
         updatedAt: 1,
