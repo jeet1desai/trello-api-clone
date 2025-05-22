@@ -16,12 +16,12 @@ import { getPagination } from '../utils/pagination';
 
 export const createWorkSpaceController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const encrypted = req.body;
-    const decrypted = decrypt(encrypted);
+    // const encrypted = req.body;
+    // const decrypted = decrypt(encrypted);
 
-    await validateRequest(decrypted, createWorkspaceSchema);
+    await validateRequest(req.body, createWorkspaceSchema);
 
-    const { name, description } = decrypted;
+    const { name, description } = req.body;
     // @ts-expect-error
     const user = req?.user;
     const data = await WorkSpaceModel.create({
