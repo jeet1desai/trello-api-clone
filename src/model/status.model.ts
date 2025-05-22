@@ -6,6 +6,7 @@ export interface BoardModelType {
   description?: string;
   board_id?: mongoose.Types.ObjectId;
   position: number;
+  background: string;
 }
 
 const schema = new mongoose.Schema<BoardModelType>(
@@ -27,6 +28,10 @@ const schema = new mongoose.Schema<BoardModelType>(
     position: {
       type: Number,
       required: true,
+    },
+    background: {
+      type: String,
+      default: '#FFF',
     },
   },
   { timestamps: true }

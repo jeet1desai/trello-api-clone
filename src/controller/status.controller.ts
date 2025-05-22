@@ -95,7 +95,7 @@ export const getStatusByBoardIdHandler = async (req: Request, res: Response, nex
 
 export const updateStatusHandler: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { statusId, newPosition, name, description } = req.body;
+    const { statusId, newPosition, name, description, background } = req.body;
     // @ts-expect-error
     const user = req?.user;
 
@@ -118,6 +118,10 @@ export const updateStatusHandler: RequestHandler = async (req: Request, res: Res
     }
     if (description !== undefined) {
       movingStatus.description = description;
+      updated = true;
+    }
+    if (background !== undefined) {
+      movingStatus.background = background;
       updated = true;
     }
 
@@ -230,5 +234,63 @@ export const deleteStatusHandler = async (req: Request, res: Response, next: Nex
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
+  }
+};
+
+export const removeStatusBackgroundHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { statusId } = req.params;
+    // @ts-expect-error
+    const user = req?.user;
+
+    if (!statusId) {
+      APIResponse(res, false, 400, 'statusId is required');
+      return;
+    }
+
+    const movingStatus = await StatusModel.findById(statusId);
+    if (!movingStatus) {
+      APIResponse(res, false, 404, 'Status not found');
+      return;
+    }
+
+    const isMember = await MemberModel.exists({ boardId: movingStatus.board_id, memberId: user._id });
+    if (!isMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You are not a member of this board.');
+      return;
+    }
+
+    // Set background to default
+    movingStatus.background = '#FFF';
+    await movingStatus.save({ validateModifiedOnly: true });
+
+    const updatedStatus = await StatusModel.findById(statusId);
+
+    // Emit updated status to board room
+    const { io } = getSocket();
+    if (io) {
+      io.to(movingStatus.board_id?.toString() ?? '').emit('receive_updated_status', {
+        data: updatedStatus,
+      });
+    }
+
+    const message = 'Status background removed successfully';
+
+    // Find members to notify
+    const members = await MemberModel.find({ boardId: movingStatus.board_id }).select('memberId');
+    const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    await saveRecentActivity(
+      user._id.toString(),
+      'Removed Color',
+      'Status',
+      movingStatus.board_id?.toString() ?? '',
+      visibleUserIds,
+      `Status background has been removed by ${user.first_name}`
+    );
+
+    APIResponse(res, true, 200, message);
+  } catch (err) {
+    APIResponse(res, false, 500, err instanceof Error ? err.message : 'Internal Server Error');
   }
 };

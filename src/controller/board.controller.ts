@@ -864,6 +864,7 @@ export const boardBackgrounds = async (req: express.Request, res: express.Respon
 };
 
 export const updateBoardBackground = async (req: express.Request, res: express.Response) => {
+  const { io } = getSocket();
   try {
     const { boardId, backgroundType, background, imageId } = req.body;
     // @ts-expect-error
@@ -928,6 +929,13 @@ export const updateBoardBackground = async (req: express.Request, res: express.R
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found.');
       return;
     }
+
+    const members = await MemberModel.find({ boardId }).select('memberId');
+    const memberIds = members.map((m) => m?.memberId?.toString());
+
+    memberIds.forEach((memberId) => {
+      emitToUser(io, memberId?.toString(), 'receive_updated_board_background', { data: board });
+    });
 
     APIResponse(res, true, HttpStatusCode.OK, 'Board background updated successfully.', board);
   } catch (err) {
