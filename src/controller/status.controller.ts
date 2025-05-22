@@ -70,7 +70,7 @@ export const getStatusByBoardIdHandler = async (req: Request, res: Response, nex
       .sort({ position: 1 })
       .populate({
         path: 'board_id',
-        select: '_id name description createdBy workspaceId background',
+        select: '_id name description createdBy workspaceId',
         populate: [
           {
             path: 'createdBy',
