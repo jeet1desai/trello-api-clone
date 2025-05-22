@@ -8,6 +8,9 @@ import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
 import { getResourceType } from '../helper/getResourceType';
 import { BoardModel } from '../model/board.model';
 import { BOARD_BACKGROUND_TYPE } from '../config/app.config';
+import { MemberModel } from '../model/members.model';
+import { emitToUser } from '../utils/socket';
+import { getSocket } from '../config/socketio.config';
 
 export const getUserProfileHandler = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -102,6 +105,7 @@ export const uploadCustomBoardImages = async (req: express.Request, res: express
 };
 
 export const deleteUserBoardBackgroundImage = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const { io } = getSocket();
   try {
     const { imageId, boardId } = req.query;
     // @ts-expect-error
@@ -134,6 +138,13 @@ export const deleteUserBoardBackgroundImage = async (req: express.Request, res: 
     await deleteFromCloudinary(image.imageId, resourceType);
 
     await UserBoardBackgroundModel.deleteOne({ _id: imageId });
+
+    const members = await MemberModel.find({ boardId }).select('memberId');
+    const memberIds = members.map((m) => m?.memberId?.toString());
+
+    memberIds.forEach((memberId) => {
+      emitToUser(io, memberId?.toString(), 'receive_updated_board_background', { data: board });
+    });
 
     APIResponse(res, true, HttpStatusCode.OK, 'User Board Background Image deleted successfully');
   } catch (err) {
