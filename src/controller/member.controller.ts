@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import APIResponse from '../helper/apiResponse';
-import { HttpStatusCode } from '../helper/enum';
+import { HttpStatusCode, TaskStatus } from '../helper/enum';
 import { MemberModel } from '../model/members.model';
 import { BoardModel } from '../model/board.model';
 import { MEMBER_ROLES } from '../config/app.config';
@@ -10,6 +10,7 @@ import User from '../model/user.model';
 import { NotificationModel } from '../model/notification.model';
 import { getSocket } from '../config/socketio.config';
 import { emitToUser } from '../utils/socket';
+import { TaskModel } from '../model/task.model';
 
 export const getMemberListController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
@@ -191,4 +192,94 @@ const getBoardMembersBySearch = async (boardId: string, search: string = '') => 
       },
     },
   ]);
+};
+
+export const leaveMemberController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const session = await mongoose.startSession();
+  const { io } = getSocket();
+  const { bid } = req.params;
+  // @ts-expect-error
+  const user = req.user;
+
+  if (!mongoose.Types.ObjectId.isValid(bid)) {
+    APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid board ID');
+    return;
+  }
+
+  try {
+    session.startTransaction();
+
+    const [board, member] = await Promise.all([
+      BoardModel.findById(bid).session(session),
+      MemberModel.findOne({ boardId: bid, memberId: user._id }).session(session),
+    ]);
+
+    if (!board) {
+      await session.abortTransaction();
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found');
+      return;
+    }
+
+    if (!member) {
+      await session.abortTransaction();
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You are not a member of this board');
+      return;
+    }
+
+    if (member.role === 'ADMIN') {
+      const otherAdmins = await MemberModel.countDocuments({
+        boardId: bid,
+        role: 'ADMIN',
+        memberId: { $ne: user._id },
+      }).session(session);
+
+      if (otherAdmins === 0) {
+        await session.abortTransaction();
+        APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'At least one admin must remain in the board');
+        return;
+      }
+    }
+
+    const pendingTasks = await TaskModel.exists({
+      board_id: bid,
+      assigned_to: user._id,
+      status: TaskStatus.INCOMPLETE,
+    }).session(session);
+
+    if (pendingTasks) {
+      await session.abortTransaction();
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You cannot leave the board until all your tasks are completed');
+      return;
+    }
+
+    const [_, __, [notification]] = await Promise.all([
+      MemberModel.deleteOne({ boardId: bid, memberId: user._id }, { session }),
+      BoardInviteModel.deleteMany({ boardId: bid, email: user.email }, { session }),
+      NotificationModel.create(
+        [
+          {
+            message: `You have left the board "${board.name}"`,
+            action: 'left',
+            receiver: user,
+            sender: user,
+          },
+        ],
+        { session }
+      ),
+    ]);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    emitToUser(io, user._id.toString(), 'receive_notification', { data: notification });
+    io?.to(bid.toString()).emit('remove_member', { data: member });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'You have left the board successfully', member);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err instanceof Error ? err.message : 'Unknown error');
+  } finally {
+    await session.endSession();
+  }
 };

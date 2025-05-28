@@ -27,7 +27,7 @@ type FilterQuery = BaseQuery & {
   $or?: Array<{ assigned_to: string | { $in: string[] } } | { created_by: string | { $in: string[] } } | { _id: { $in: string[] } }>;
   $and?: Array<{ _id: { $in: string[] } | { $nin: string[] } } | { $or: Array<any> } | Record<string, any>>;
   status?: string;
-  end_date?: { $ne: null } | null | { $lt: Date, $ne: null } | { $gte: Date, $lt: Date, $ne: null };
+  end_date?: { $ne: null } | null | { $lt: Date; $ne: null } | { $gte: Date; $lt: Date; $ne: null };
   _id?: { $in: string[] } | { $nin: string[] };
 };
 
@@ -156,7 +156,9 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
       }
 
       query.end_date = {
-        $gte: startDate, $lt: endDate, $ne: null
+        $gte: startDate,
+        $lt: endDate,
+        $ne: null,
       };
     }
 
@@ -177,8 +179,8 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     if (hasMember !== undefined) {
       if (hasMember === false) {
         const tasksWithMembers = await TaskMemberModel.find().select('task_id');
-        const taskIdsWithMembers = tasksWithMembers.map(m => m.task_id?.toString()).filter((id): id is string => Boolean(id));
-        
+        const taskIdsWithMembers = tasksWithMembers.map((m) => m.task_id?.toString()).filter((id): id is string => Boolean(id));
+
         if (query.$or) {
           query.$and = [{ _id: { $nin: taskIdsWithMembers } }, { $or: query.$or }];
           delete query.$or;
@@ -191,10 +193,10 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     let taskIds: string[] = [];
     if (labelIds && Array.isArray(labelIds) && labelIds.length > 0) {
       const taskLabels = await TaskLabelModel.find({
-        label_id: { $in: labelIds.map(id => mongoose.Types.ObjectId.isValid(id) ? id : null).filter(Boolean) }
+        label_id: { $in: labelIds.map((id) => (mongoose.Types.ObjectId.isValid(id) ? id : null)).filter(Boolean) },
       }).select('task_id');
 
-      taskIds = taskLabels.map(tl => tl.task_id?.toString()).filter((id): id is string => Boolean(id));
+      taskIds = taskLabels.map((tl) => tl.task_id?.toString()).filter((id): id is string => Boolean(id));
 
       if (taskIds.length > 0) {
         if (query.$or) {
@@ -535,7 +537,7 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
-          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -599,7 +601,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
-          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id.toString()}`
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -651,7 +653,7 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
     await validateRequest(req.body, duplicateTaskSchema);
     // @ts-expect-error
     const user = req?.user;
-    const { taskId } = req.body;
+    const { taskId, title } = req.body;
 
     // Find the original task
     const originalTask = await TaskModel.findById(taskId).lean();
@@ -661,14 +663,15 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
     }
 
     const requestingMember = await MemberModel.findOne({ boardId: originalTask.board_id, memberId: user._id });
-    if (!requestingMember || requestingMember.role !== MEMBER_ROLES.ADMIN) {
-      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to remove members');
+
+    if (!requestingMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to duplicate task');
       return;
     }
 
     // Create a new task with the same properties
     const duplicatedTask = new TaskModel({
-      title: `${originalTask.title} - Copy`,
+      title: title,
       description: originalTask.description,
       board_id: originalTask.board_id,
       status_list_id: originalTask.status_list_id,
@@ -745,7 +748,7 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
 
     // Get all boards where user is a member
     const memberBoards = await MemberModel.find({ memberId: user._id }).select('boardId');
-    const boardIds = memberBoards.map(member => member.boardId);
+    const boardIds = memberBoards.map((member) => member.boardId);
 
     if (boardIds.length === 0) {
       APIResponse(res, true, HttpStatusCode.OK, 'No boards found for the user', []);
@@ -761,13 +764,10 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
       end_date: {
         $gte: now,
         $lte: sevenDaysFromNow,
-        $ne: null
+        $ne: null,
       },
       status: { $ne: TaskStatus.COMPLETED },
-      $or: [
-        { assigned_to: user._id },
-        { created_by: user._id }
-      ]
+      $or: [{ assigned_to: user._id }, { created_by: user._id }],
     };
 
     const tasks = await TaskModel.find(query)
