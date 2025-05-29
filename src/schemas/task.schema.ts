@@ -50,3 +50,21 @@ export const attachmentSchema = Joi.object({
     'any.required': 'Task id is required',
   }),
 });
+
+export const addEstimatedTimeSchema = Joi.object({
+  task_id: Joi.string().required().trim().messages({
+    'string.empty': 'Task id is required',
+    'any.required': 'Task id is required',
+  }),
+  hours: Joi.number().required().min(0).messages({
+    'number.empty': 'Hours is required',
+    'any.required': 'Hours is required',
+    'number.min': 'Hours must be greater than or equal to 0',
+  }),
+  minutes: Joi.number().required().min(0).max(59).messages({
+    'number.empty': 'Minutes is required',
+    'any.required': 'Minutes is required',
+    'number.min': 'Minutes must be greater than or equal to 0',
+    'number.max': 'Minutes must be less than or equal to 59',
+  }),
+});

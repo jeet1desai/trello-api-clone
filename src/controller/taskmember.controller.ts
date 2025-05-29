@@ -60,7 +60,7 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
         action: 'invited',
         receiver: convertObjectId(memberDetails._id.toString()),
         sender: user,
-        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
+        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
       });
 
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
@@ -139,7 +139,7 @@ export const assignTaskMemberHandler = async (req: Request, res: Response, next:
         action: 'assigned',
         receiver: convertObjectId(memberDetails._id.toString()),
         sender: user,
-        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
+        link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
       });
 
       emitToUser(io, memberDetails._id.toString(), 'receive_notification', { data: notification });
