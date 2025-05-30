@@ -18,6 +18,9 @@ import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
+import { parseCSVBuffer } from '../utils/parseCSVBuffer';
+import { taskRowSchema } from '../schemas/taskrow.schema';
+import { StatusModel } from '../model/status.model';
 
 type BaseQuery = {
   status_list_id: string;
@@ -812,6 +815,99 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.file?.buffer) {
+      res.status(400).json({ success: false, message: 'CSV file is missing' });
+      return;
+    }
+
+    const tasks = await parseCSVBuffer(req.file.buffer);
+
+    const { board_id } = req.body;
+
+    for (const row of tasks) {
+      await taskRowSchema.validate(row);
+
+      //@ts-expect-error
+      const user = req?.user;
+
+      let status = await StatusModel.findOne({ name: row.status, board_id });
+      if (!status) {
+        const lastStatus = await StatusModel.findOne({ board_id }).sort('-position').exec();
+        const nextPositionStatus = lastStatus ? lastStatus.position + 1 : 1;
+
+        status = await StatusModel.create({
+          name: row.status,
+          board_id,
+          position: nextPositionStatus,
+        });
+        const { io } = getSocket();
+
+        if (io)
+          io.to(status?.board_id?.toString() ?? '').emit('receive_status', {
+            data: status,
+          });
+      }
+
+      const taskExist = await TaskModel.findOne({
+        title: row.title,
+        status_list_id: status?.id,
+        board_id: board_id,
+      });
+
+      if (taskExist) continue;
+
+      const lastTask = await TaskModel.findOne({ status_list_id: status?.id, board_id: board_id }).sort('-position').exec();
+
+      const nextPosition = lastTask ? lastTask.position + 1 : 1;
+
+      const newTask = await TaskModel.create({
+        title: row.title,
+        status_list_id: status?.id,
+        board_id: board_id,
+        created_by: user._id,
+        position: nextPosition,
+      });
+
+      const { io } = getSocket();
+
+      if (io) {
+        io.to(newTask.board_id?.toString() ?? '').emit('receive-new-task', { data: newTask });
+      }
+
+      const members = await MemberModel.find({ boardId: board_id }).select('memberId');
+      const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+      await saveRecentActivity(
+        user._id.toString(),
+        'Created',
+        'Status',
+        board_id,
+        visibleUserIds,
+        `Status "${row.status}" has been created by ${user.first_name}`
+      );
+
+      await saveRecentActivity(
+        user._id.toString(),
+        'Created',
+        'Task',
+        board_id,
+        visibleUserIds,
+        `Task "${row.title}" was created by ${user.first_name}`
+      );
+    }
+
+    APIResponse(res, true, 201, 'Tasks imported successfully');
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
     }
   }
 };

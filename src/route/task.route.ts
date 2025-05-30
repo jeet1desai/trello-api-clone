@@ -9,10 +9,12 @@ import {
   getTaskByIdHandler,
   getTaskByStatusIdHandler,
   getUpcomingDeadlineTasksHandler,
+  importTasksFromCSV,
   updateTaskHandler,
   uploadAttachmentHandler,
 } from '../controller/task.controller';
 import multer from 'multer';
+import { validateFileUpload } from '../middleware/validateCSVFile';
 const upload = multer();
 const taskRouter = express.Router();
 
@@ -27,5 +29,6 @@ taskRouter.delete('/delete-task/:id', deleteTaskHandler);
 taskRouter.post('/attachment', upload.array('attachment', 10), uploadAttachmentHandler);
 taskRouter.delete('/delete-attachment', deleteAttachmentHandler);
 taskRouter.get('/get-attachment', getAttachmentHandler);
+taskRouter.post('/import-csv', upload.single('file'), validateFileUpload, importTasksFromCSV);
 
 export default taskRouter;
