@@ -25,6 +25,7 @@ import { createObjectCsvWriter } from 'csv-writer';
 import { BoardModel } from '../model/board.model';
 import path from 'path';
 import fs from 'fs';
+import { convert } from 'html-to-text';
 
 type BaseQuery = {
   status_list_id: string;
@@ -969,7 +970,7 @@ export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> 
     const id = task._id.toString();
     return {
       Title: task.title,
-      Description: task.description || '',
+      Description: convert(task?.description || '', { wordwrap: false }),
       Board: (task.board_id as any)?.name || '',
       StatusName: (task.status_list_id as any)?.name || '',
       Priority: task.priority,
