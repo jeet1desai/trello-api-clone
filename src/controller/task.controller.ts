@@ -1,11 +1,11 @@
-import { Request, Response, RequestHandler, NextFunction } from 'express';
+import e, { Request, Response, RequestHandler, NextFunction } from 'express';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode, TaskStatus } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose, { Types } from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
+import { addEstimatedTimeSchema, attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
@@ -18,6 +18,7 @@ import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
+<<<<<<< HEAD
 import { parseCSVBuffer } from '../utils/parseCSVBuffer';
 import { taskRowSchema } from '../schemas/taskrow.schema';
 import { StatusModel } from '../model/status.model';
@@ -26,6 +27,9 @@ import { BoardModel } from '../model/board.model';
 import path from 'path';
 import fs from 'fs';
 import { convert } from 'html-to-text';
+=======
+import { ActiveTimerModel } from '../model/activeTimer.model';
+>>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
 
 type BaseQuery = {
   status_list_id: string;
@@ -61,6 +65,9 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
       board_id,
       created_by: user._id,
       position: nextPosition,
+      estimated_hours: 0,
+      estimated_minutes: 0,
+      total_estimated_time: 0,
     });
 
     const { io } = getSocket();
@@ -266,7 +273,9 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
   try {
     const { id } = req.params;
     const tasks = await TaskModel.findById({ _id: id })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
+      .select(
+        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes total_estimated_time actual_time_spent timer_start_time is_timer_active timer_status timer_sessions'
+      )
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -287,7 +296,14 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
         select: '_id first_name last_name',
       });
 
-    APIResponse(res, true, HttpStatusCode.OK, 'Task details successfully fetched', tasks);
+    const response: any = tasks?.toObject();
+    if (tasks?.is_timer_active && tasks?.timer_start_time) {
+      const currentElapsed = new Date().getTime() - tasks.timer_start_time.getTime();
+      response.current_elapsed = currentElapsed;
+      response.total_current_time = tasks?.actual_time_spent ? Number(tasks.actual_time_spent) + currentElapsed : currentElapsed;
+    }
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Task details successfully fetched', response);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -824,6 +840,7 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
   }
 };
 
+<<<<<<< HEAD
 export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.file?.buffer) {
@@ -913,16 +930,49 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
     } else if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
-    }
-  }
-};
-
-export const exportTasks = async (req: Request, res: Response) => {
+=======
+export const addEstimatedTimeHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const boardId = req.params.boardId;
-    const filePath = await exportTasksCSVByBoardId(boardId);
-    const fileName = path.basename(filePath);
-    res.download(filePath, fileName);
+    await validateRequest(req.body, addEstimatedTimeSchema);
+
+    //@ts-expect-error
+    const user = req?.user;
+    const { task_id, hours, minutes } = req.body;
+
+    if (hours < 0 || minutes < 0 || minutes > 59) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid time estimation. Hours must be >= 0 and minutes must be 0-59.');
+      return;
+    }
+
+    const task = await TaskModel.findById(task_id);
+    if (!task) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    const taskMembers = await TaskMemberModel.find({ task_id: task_id });
+    if (!taskMembers.map((tm) => tm.member_id?.toString()).includes(user._id.toString())) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'Only task members can add estimated time');
+      return;
+    }
+
+    const existingTotalMinutes = Number(task.estimated_hours * 60) + Number(task.estimated_minutes);
+    const newTotalMinutes = Number(hours * 60) + Number(minutes);
+
+    if (existingTotalMinutes > newTotalMinutes) {
+      const actualTrackedMinutes = task.actual_time_spent ? Math.ceil(task.actual_time_spent / (1000 * 60)) : 0;
+
+      if (newTotalMinutes < actualTrackedMinutes) {
+        APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Cannot decrease estimation below already tracked time.');
+        return;
+      }
+    }
+
+    task.estimated_hours = Number(hours);
+    task.estimated_minutes = Number(minutes);
+    await task.save();
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Estimated time added successfully', task);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -930,6 +980,121 @@ export const exportTasks = async (req: Request, res: Response) => {
   }
 };
 
+export const startTimerHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    // @ts-expect-error
+    const user = req?.user;
+
+    const task = await TaskModel.findById(id);
+    if (!task) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    if (task?.assigned_to?.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'Only assigned user can start timer');
+      return;
+    }
+
+    const existingActiveTimer = await ActiveTimerModel.findOne({ user_id: user._id });
+    if (existingActiveTimer) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'You already have an active timer running. Please stop it before starting a new one.');
+      return;
+    }
+
+    if (task?.timer_status === 'completed') {
+      const totalEstimatedMs = (task.estimated_hours * 60 * 60 * 1000) + (task.estimated_minutes * 60 * 1000);
+
+      if (totalEstimatedMs <= (task.actual_time_spent || 0)) {
+        APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Cannot start timer. Estimated time must be greater than actual time spent.');
+        return;
+      }
+      task.timer_status = 'in-progress';
+    }
+
+    const startTime = new Date();
+    task.timer_start_time = startTime;
+    task.is_timer_active = true;
+    task.timer_status = 'in-progress';
+    await task.save();
+
+    await ActiveTimerModel.create({ user_id: user._id, task_id: task._id, start_time: startTime });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Timer started successfully', {
+      startTime: startTime,
+      estimatedEndTime: new Date(startTime.getTime() + (task.total_estimated_time - task.actual_time_spent)),
+      totalEstimatedTime: task.total_estimated_time,
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+>>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
+    }
+  }
+};
+
+<<<<<<< HEAD
+export const exportTasks = async (req: Request, res: Response) => {
+  try {
+    const boardId = req.params.boardId;
+    const filePath = await exportTasksCSVByBoardId(boardId);
+    const fileName = path.basename(filePath);
+    res.download(filePath, fileName);
+=======
+export const stopTimerHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    // @ts-expect-error
+    const user = req?.user;
+
+    const task = await TaskModel.findById(id);
+    if (!task) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    if (task?.assigned_to?.toString() !== user._id.toString()) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'Only assigned user can stop timer');
+      return;
+    }
+
+    const activeTimer = await ActiveTimerModel.findOne({ user_id: user._id, task_id: task._id });
+    if (!activeTimer) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'No active timer found for this task.');
+      return;
+    }
+
+    const endTime = new Date();
+    const sessionDuration = endTime.getTime() - activeTimer?.start_time?.getTime();
+
+    task.actual_time_spent += sessionDuration;
+    task.timer_start_time = null;
+    task.is_timer_active = false;
+    task.timer_sessions.push({ start_time: activeTimer.start_time, end_time: endTime, duration: sessionDuration });
+    if (task.actual_time_spent >= task.total_estimated_time) {
+      task.timer_status = 'completed';
+    } else {
+      task.timer_status = 'in-progress';
+    }
+
+    await task.save();
+    await ActiveTimerModel.deleteOne({ _id: activeTimer._id });
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Timer stopped successfully', {
+      sessionDuration: sessionDuration,
+      totalTimeSpent: task.actual_time_spent,
+      status: task.timer_status,
+    });
+>>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+<<<<<<< HEAD
 export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> => {
   const board = await BoardModel.findById(boardId);
   if (!board) throw new Error('Board not found');
@@ -1009,4 +1174,47 @@ export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> 
 
   await csvWriter.writeRecords(records);
   return filePath;
+=======
+export const getTimerStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    // @ts-expect-error
+    const user = req?.user;
+
+    const task = await TaskModel.findById(id);
+    if (!task) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    const activeTimer = await ActiveTimerModel.findOne({ user_id: user._id, task_id: task._id });
+    if (!activeTimer) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'No active timer found for this task.');
+      return;
+    }
+
+    const currentTime = new Date();
+    const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
+    const remainingTime = Number(task.total_estimated_time) - (Number(elapsedTime) + Number(task.actual_time_spent));
+
+    const response = {
+      hasActiveTimer: true,
+      taskId: task._id,
+      taskTitle: task.title,
+      startTime: activeTimer.start_time,
+      totalEstimatedTime: task.total_estimated_time,
+      elapsedTime: elapsedTime,
+      remainingTime: remainingTime,
+      isOvertime: elapsedTime >= task.total_estimated_time,
+      estimatedHours: Number(task.estimated_hours),
+      estimatedMinutes: Number(task.estimated_minutes),
+    };
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Timer status', response);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+>>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
 };

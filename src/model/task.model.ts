@@ -19,9 +19,21 @@ export interface TaskModelType {
   position: number;
   status?: TaskStatus;
   assigned_to?: mongoose.Types.ObjectId;
+  estimated_hours: number;
+  estimated_minutes: number;
+  total_estimated_time: number;
+  actual_time_spent: number;
+  timer_start_time: Date | null;
+  is_timer_active: boolean;
+  timer_sessions: {
+    start_time: Date;
+    end_time: Date;
+    duration: number;
+  }[];
+  timer_status: string;
 }
 
-const schema = new mongoose.Schema<TaskModelType>(
+const taskSchema = new mongoose.Schema<TaskModelType>(
   {
     title: {
       type: String,
@@ -79,8 +91,55 @@ const schema = new mongoose.Schema<TaskModelType>(
       enum: Object.values(TaskStatus),
       default: TaskStatus.INCOMPLETE,
     },
+    estimated_hours: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    estimated_minutes: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 59,
+    },
+    total_estimated_time: {
+      type: Number, // in milliseconds
+      required: true,
+      default: 0,
+    },
+    actual_time_spent: {
+      type: Number,
+      default: 0, // in milliseconds
+    },
+    timer_start_time: {
+      type: Date,
+      default: null,
+    },
+    is_timer_active: {
+      type: Boolean,
+      default: false,
+    },
+    timer_sessions: [
+      {
+        start_time: Date,
+        end_time: Date,
+        duration: Number, // in milliseconds
+      },
+    ],
+    timer_status: {
+      type: String,
+      enum: ['pending', 'in-progress', 'completed'],
+      default: 'pending',
+    },
   },
   { timestamps: true }
 );
 
-export const TaskModel = mongoose.model('task', schema);
+taskSchema.pre('save', function (next) {
+  if (this.isModified('estimated_hours') || this.isModified('estimated_minutes')) {
+    this.total_estimated_time = this.estimated_hours * 60 * 60 * 1000 + this.estimated_minutes * 60 * 1000;
+  }
+  next();
+});
+
+export const TaskModel = mongoose.model('task', taskSchema);

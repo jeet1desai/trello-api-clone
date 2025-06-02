@@ -64,7 +64,7 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
-          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -144,7 +144,7 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
-          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });

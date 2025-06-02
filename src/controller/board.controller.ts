@@ -371,7 +371,6 @@ export const getBoardController = async (req: express.Request, res: express.Resp
     // @ts-expect-error
     const user = req.user;
     const { id } = req.params;
-    console.log('called', id);
     const [board] = await BoardModel.aggregate(getBoardDetailsQuery(id));
 
     if (!board) {
@@ -940,5 +939,69 @@ export const updateBoardBackground = async (req: express.Request, res: express.R
     APIResponse(res, true, HttpStatusCode.OK, 'Board background updated successfully.', board);
   } catch (err) {
     APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err instanceof Error ? err.message : 'Something went wrong');
+  }
+};
+
+export const getBoardAnalytics = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const { boardId } = req.params;
+
+    const tasks = await TaskModel.find({ board_id: boardId }).populate({
+      path: 'assigned_to',
+      select: '_id first_name last_name',
+    });
+
+    const userAnalytics: Map<string, any> = new Map();
+
+    tasks.forEach((task: any) => {
+      if (!task.assigned_to) return;
+      const userId = task.assigned_to._id.toString();
+      const userName = `${task.assigned_to.first_name} ${task.assigned_to.last_name}`;
+      if (!userAnalytics.has(userId)) {
+        userAnalytics.set(userId, {
+          userId,
+          name: userName,
+          completedTasks: 0,
+          spendHours: 0,
+          estimatedHours: 0,
+          actualHours: 0,
+          efficiency: 0,
+        });
+      }
+      const userStats = userAnalytics.get(userId)!;
+      userStats.estimatedHours += (task.total_estimated_time || 0) / (1000 * 60 * 60);
+      userStats.actualHours += (task.actual_time_spent || 0) / (1000 * 60 * 60);
+      if (task.status === 'Completed') {
+        userStats.completedTasks += 1;
+      }
+    });
+
+    let totalSpendHours = 0;
+    const usersList: any[] = [];
+    userAnalytics.forEach((user) => {
+      user.efficiency = user.estimatedHours > 0 ? (user.estimatedHours / user.actualHours) * 100 : 0;
+      totalSpendHours += user.actualHours;
+      usersList.push(user);
+    });
+
+    usersList.sort((a, b) => b.efficiency - a.efficiency);
+
+    const response = {
+      averageSpendHours: totalSpendHours / usersList.length,
+      mostEffective: usersList[0]?.name || 'N/A',
+      leastEffective: usersList[usersList.length - 1]?.name || 'N/A',
+      usersList: usersList.map((user) => ({
+        name: user.name,
+        completedTasks: user.completedTasks,
+        spendHours: Math.round(user.actualHours * 100) / 100,
+        estimatedHours: Math.round(user.estimatedHours * 100) / 100,
+      })),
+    };
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Analytics fetched successfully', response);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
   }
 };
