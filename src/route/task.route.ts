@@ -12,12 +12,9 @@ import {
   getTaskByStatusIdHandler,
   getTimerStatusHandler,
   getUpcomingDeadlineTasksHandler,
-<<<<<<< HEAD
   importTasksFromCSV,
-=======
   startTimerHandler,
   stopTimerHandler,
->>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
   updateTaskHandler,
   uploadAttachmentHandler,
 } from '../controller/task.controller';

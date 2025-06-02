@@ -18,7 +18,6 @@ import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
-<<<<<<< HEAD
 import { parseCSVBuffer } from '../utils/parseCSVBuffer';
 import { taskRowSchema } from '../schemas/taskrow.schema';
 import { StatusModel } from '../model/status.model';
@@ -27,9 +26,7 @@ import { BoardModel } from '../model/board.model';
 import path from 'path';
 import fs from 'fs';
 import { convert } from 'html-to-text';
-=======
 import { ActiveTimerModel } from '../model/activeTimer.model';
->>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
 
 type BaseQuery = {
   status_list_id: string;
@@ -840,97 +837,6 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
   }
 };
 
-<<<<<<< HEAD
-export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    if (!req.file?.buffer) {
-      res.status(400).json({ success: false, message: 'CSV file is missing' });
-      return;
-    }
-
-    const tasks = await parseCSVBuffer(req.file.buffer);
-
-    const { board_id } = req.body;
-
-    for (const row of tasks) {
-      await taskRowSchema.validate(row);
-
-      //@ts-expect-error
-      const user = req?.user;
-
-      let status = await StatusModel.findOne({ name: row.status, board_id });
-      if (!status) {
-        const lastStatus = await StatusModel.findOne({ board_id }).sort('-position').exec();
-        const nextPositionStatus = lastStatus ? lastStatus.position + 1 : 1;
-
-        status = await StatusModel.create({
-          name: row.status,
-          board_id,
-          position: nextPositionStatus,
-        });
-        const { io } = getSocket();
-
-        if (io)
-          io.to(status?.board_id?.toString() ?? '').emit('receive_status', {
-            data: status,
-          });
-      }
-
-      const taskExist = await TaskModel.findOne({
-        title: row.title,
-        status_list_id: status?.id,
-        board_id: board_id,
-      });
-
-      if (taskExist) continue;
-
-      const lastTask = await TaskModel.findOne({ status_list_id: status?.id, board_id: board_id }).sort('-position').exec();
-
-      const nextPosition = lastTask ? lastTask.position + 1 : 1;
-
-      const newTask = await TaskModel.create({
-        title: row.title,
-        status_list_id: status?.id,
-        board_id: board_id,
-        created_by: user._id,
-        position: nextPosition,
-      });
-
-      const { io } = getSocket();
-
-      if (io) {
-        io.to(newTask.board_id?.toString() ?? '').emit('receive-new-task', { data: newTask });
-      }
-
-      const members = await MemberModel.find({ boardId: board_id }).select('memberId');
-      const visibleUserIds = members.map((m: any) => m.memberId.toString());
-
-      await saveRecentActivity(
-        user._id.toString(),
-        'Created',
-        'Status',
-        board_id,
-        visibleUserIds,
-        `Status "${row.status}" has been created by ${user.first_name}`
-      );
-
-      await saveRecentActivity(
-        user._id.toString(),
-        'Created',
-        'Task',
-        board_id,
-        visibleUserIds,
-        `Task "${row.title}" was created by ${user.first_name}`
-      );
-    }
-
-    APIResponse(res, true, 201, 'Tasks imported successfully');
-  } catch (err) {
-    if (err instanceof Joi.ValidationError) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
-    } else if (err instanceof Error) {
-      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
-=======
 export const addEstimatedTimeHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await validateRequest(req.body, addEstimatedTimeSchema);
@@ -1029,19 +935,10 @@ export const startTimerHandler = async (req: Request, res: Response, next: NextF
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
->>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
     }
   }
 };
 
-<<<<<<< HEAD
-export const exportTasks = async (req: Request, res: Response) => {
-  try {
-    const boardId = req.params.boardId;
-    const filePath = await exportTasksCSVByBoardId(boardId);
-    const fileName = path.basename(filePath);
-    res.download(filePath, fileName);
-=======
 export const stopTimerHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
@@ -1086,7 +983,6 @@ export const stopTimerHandler = async (req: Request, res: Response, next: NextFu
       totalTimeSpent: task.actual_time_spent,
       status: task.timer_status,
     });
->>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -1094,7 +990,155 @@ export const stopTimerHandler = async (req: Request, res: Response, next: NextFu
   }
 };
 
-<<<<<<< HEAD
+export const getTimerStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    // @ts-expect-error
+    const user = req?.user;
+
+    const task = await TaskModel.findById(id);
+    if (!task) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
+      return;
+    }
+
+    const activeTimer = await ActiveTimerModel.findOne({ user_id: user._id, task_id: task._id });
+    if (!activeTimer) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'No active timer found for this task.');
+      return;
+    }
+
+    const currentTime = new Date();
+    const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
+    const remainingTime = Number(task.total_estimated_time) - (Number(elapsedTime) + Number(task.actual_time_spent));
+
+    const response = {
+      hasActiveTimer: true,
+      taskId: task._id,
+      taskTitle: task.title,
+      startTime: activeTimer.start_time,
+      totalEstimatedTime: task.total_estimated_time,
+      elapsedTime: elapsedTime,
+      remainingTime: remainingTime,
+      isOvertime: elapsedTime >= task.total_estimated_time,
+      estimatedHours: Number(task.estimated_hours),
+      estimatedMinutes: Number(task.estimated_minutes),
+    };
+
+    APIResponse(res, true, HttpStatusCode.OK, 'Timer status', response);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.file?.buffer) {
+      res.status(400).json({ success: false, message: 'CSV file is missing' });
+      return;
+    }
+
+    const tasks = await parseCSVBuffer(req.file.buffer);
+
+    const { board_id } = req.body;
+
+    for (const row of tasks) {
+      await taskRowSchema.validate(row);
+
+      //@ts-expect-error
+      const user = req?.user;
+
+      let status = await StatusModel.findOne({ name: row.status, board_id });
+      if (!status) {
+        const lastStatus = await StatusModel.findOne({ board_id }).sort('-position').exec();
+        const nextPositionStatus = lastStatus ? lastStatus.position + 1 : 1;
+
+        status = await StatusModel.create({
+          name: row.status,
+          board_id,
+          position: nextPositionStatus,
+        });
+        const { io } = getSocket();
+
+        if (io)
+          io.to(status?.board_id?.toString() ?? '').emit('receive_status', {
+            data: status,
+          });
+      }
+
+      const taskExist = await TaskModel.findOne({
+        title: row.title,
+        status_list_id: status?.id,
+        board_id: board_id,
+      });
+
+      if (taskExist) continue;
+
+      const lastTask = await TaskModel.findOne({ status_list_id: status?.id, board_id: board_id }).sort('-position').exec();
+
+      const nextPosition = lastTask ? lastTask.position + 1 : 1;
+
+      const newTask = await TaskModel.create({
+        title: row.title,
+        status_list_id: status?.id,
+        board_id: board_id,
+        created_by: user._id,
+        position: nextPosition,
+      });
+
+      const { io } = getSocket();
+
+      if (io) {
+        io.to(newTask.board_id?.toString() ?? '').emit('receive-new-task', { data: newTask });
+      }
+
+      const members = await MemberModel.find({ boardId: board_id }).select('memberId');
+      const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+      await saveRecentActivity(
+        user._id.toString(),
+        'Created',
+        'Status',
+        board_id,
+        visibleUserIds,
+        `Status "${row.status}" has been created by ${user.first_name}`
+      );
+
+      await saveRecentActivity(
+        user._id.toString(),
+        'Created',
+        'Task',
+        board_id,
+        visibleUserIds,
+        `Task "${row.title}" was created by ${user.first_name}`
+      );
+    }
+
+    APIResponse(res, true, 201, 'Tasks imported successfully');
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+  }
+};
+
+export const exportTasks = async (req: Request, res: Response) => {
+  try {
+    const boardId = req.params.boardId;
+    const filePath = await exportTasksCSVByBoardId(boardId);
+    const fileName = path.basename(filePath);
+    res.download(filePath, fileName);
+} catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
 export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> => {
   const board = await BoardModel.findById(boardId);
   if (!board) throw new Error('Board not found');
@@ -1174,47 +1218,4 @@ export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> 
 
   await csvWriter.writeRecords(records);
   return filePath;
-=======
-export const getTimerStatusHandler = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { id } = req.params;
-    // @ts-expect-error
-    const user = req?.user;
-
-    const task = await TaskModel.findById(id);
-    if (!task) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task not found..!');
-      return;
-    }
-
-    const activeTimer = await ActiveTimerModel.findOne({ user_id: user._id, task_id: task._id });
-    if (!activeTimer) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'No active timer found for this task.');
-      return;
-    }
-
-    const currentTime = new Date();
-    const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
-    const remainingTime = Number(task.total_estimated_time) - (Number(elapsedTime) + Number(task.actual_time_spent));
-
-    const response = {
-      hasActiveTimer: true,
-      taskId: task._id,
-      taskTitle: task.title,
-      startTime: activeTimer.start_time,
-      totalEstimatedTime: task.total_estimated_time,
-      elapsedTime: elapsedTime,
-      remainingTime: remainingTime,
-      isOvertime: elapsedTime >= task.total_estimated_time,
-      estimatedHours: Number(task.estimated_hours),
-      estimatedMinutes: Number(task.estimated_minutes),
-    };
-
-    APIResponse(res, true, HttpStatusCode.OK, 'Timer status', response);
-  } catch (err) {
-    if (err instanceof Error) {
-      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
-    }
-  }
->>>>>>> 3da1c6182fcd8c3d0c9c983d3b8487d884309d96
 };
