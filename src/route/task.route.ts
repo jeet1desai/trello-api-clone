@@ -5,6 +5,7 @@ import {
   deleteAttachmentHandler,
   deleteTaskHandler,
   duplicateTaskHandler,
+  exportTasks,
   getAttachmentHandler,
   getTaskByIdHandler,
   getTaskByStatusIdHandler,
@@ -30,5 +31,6 @@ taskRouter.post('/attachment', upload.array('attachment', 10), uploadAttachmentH
 taskRouter.delete('/delete-attachment', deleteAttachmentHandler);
 taskRouter.get('/get-attachment', getAttachmentHandler);
 taskRouter.post('/import-csv', upload.single('file'), validateFileUpload, importTasksFromCSV);
+taskRouter.get('/export-csv/:boardId', exportTasks);
 
 export default taskRouter;

@@ -3,7 +3,7 @@ import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode, TaskStatus } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { TaskModel } from '../model/task.model';
 import { attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
@@ -21,6 +21,10 @@ import { saveRecentActivity } from '../helper/recentActivityService';
 import { parseCSVBuffer } from '../utils/parseCSVBuffer';
 import { taskRowSchema } from '../schemas/taskrow.schema';
 import { StatusModel } from '../model/status.model';
+import { createObjectCsvWriter } from 'csv-writer';
+import { BoardModel } from '../model/board.model';
+import path from 'path';
+import fs from 'fs';
 
 type BaseQuery = {
   status_list_id: string;
@@ -910,4 +914,98 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
       APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
     }
   }
+};
+
+export const exportTasks = async (req: Request, res: Response) => {
+  try {
+    const boardId = req.params.boardId;
+    const filePath = await exportTasksCSVByBoardId(boardId);
+    const fileName = path.basename(filePath);
+    res.download(filePath, fileName);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> => {
+  const board = await BoardModel.findById(boardId);
+  if (!board) throw new Error('Board not found');
+
+  const tasks = await TaskModel.find({ board_id: boardId })
+    .populate('board_id', 'name')
+    .populate('status_list_id', 'name')
+    .populate('assigned_to', 'email')
+    .populate('created_by', 'email');
+
+  const taskIds = tasks.map((task) => task._id);
+
+  const [taskLabels, taskMembers] = await Promise.all([
+    TaskLabelModel.find({ task_id: { $in: taskIds } }).populate('label_id', 'name'),
+    TaskMemberModel.find({ task_id: { $in: taskIds } }).populate('member_id', 'first_name last_name'),
+  ]);
+
+  const labelsMap: Record<string, string[]> = {};
+  for (const label of taskLabels) {
+    const key = (label.task_id as Types.ObjectId).toString();
+    if (!labelsMap[key]) labelsMap[key] = [];
+    if (label.label_id && 'name' in label.label_id) {
+      labelsMap[key].push((label.label_id as any).name);
+    }
+  }
+
+  const membersMap: Record<string, string[]> = {};
+  for (const member of taskMembers) {
+    const key = (member.task_id as Types.ObjectId).toString();
+    if (!membersMap[key]) membersMap[key] = [];
+    if (member.member_id && 'first_name' in member.member_id) {
+      const user = member.member_id as any;
+      membersMap[key].push(`${user.first_name} ${user.last_name || ''}`.trim());
+    }
+  }
+
+  const records = tasks.map((task) => {
+    const id = task._id.toString();
+    return {
+      Title: task.title,
+      Description: task.description || '',
+      Board: (task.board_id as any)?.name || '',
+      StatusName: (task.status_list_id as any)?.name || '',
+      Priority: task.priority,
+      CreatedBy: (task.created_by as any)?.email,
+      AssignedTo: (task.assigned_to as any)?.email || '',
+      StartDate: task.start_date?.toISOString().split('T')[0] || '',
+      EndDate: task.end_date?.toISOString().split('T')[0] || '',
+      Status: task.status || '',
+      Labels: labelsMap[id]?.join('- ') || '',
+      Members: membersMap[id]?.join('- ') || '',
+    };
+  });
+
+  const fileName = `${board?.name?.replace(/\s+/g, '_')}.csv`;
+  const exportDir = path.resolve('exports');
+  fs.mkdirSync(exportDir, { recursive: true });
+  const filePath = path.join(exportDir, fileName);
+
+  const csvWriter = createObjectCsvWriter({
+    path: filePath,
+    header: [
+      { id: 'Title', title: 'Title' },
+      { id: 'Description', title: 'Description' },
+      { id: 'Board', title: 'Board' },
+      { id: 'StatusName', title: 'Status Name' },
+      { id: 'Priority', title: 'Priority' },
+      { id: 'CreatedBy', title: 'Created By' },
+      { id: 'AssignedTo', title: 'Assigned To' },
+      { id: 'StartDate', title: 'Start Date' },
+      { id: 'EndDate', title: 'End Date' },
+      { id: 'Status', title: 'Status' },
+      { id: 'Labels', title: 'Labels' },
+      { id: 'Members', title: 'Members' },
+    ],
+  });
+
+  await csvWriter.writeRecords(records);
+  return filePath;
 };
