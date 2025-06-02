@@ -6,8 +6,6 @@ export class TimerBackgroundService {
   static startBackgroundCheck() {
     // Run every minute to check for overtime timers
     cron.schedule('* * * * *', async () => {
-      console.log('Checking for overtime timers...');
-
       try {
         const activeTimers = await ActiveTimerModel.find().populate('task_id');
 
@@ -19,8 +17,6 @@ export class TimerBackgroundService {
 
             // Check if timer has exceeded estimated time
             if (elapsedTime >= task.total_estimated_time) {
-              console.log(`Auto-stopping overtime timer for task: ${task.title}`);
-
               // Update task
               task.actual_time_spent += elapsedTime;
               task.timer_start_time = null;
