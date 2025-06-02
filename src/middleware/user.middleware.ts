@@ -38,7 +38,7 @@ const refetchToken = async (token: string) => {
 export default async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
   const accessToken = authHeader?.split(' ')[1] || '';
-  const refreshToken = req.headers['x-refresh-token'] as string || '';
+  const refreshToken = (req.headers['x-refresh-token'] as string) || '';
 
   try {
     if (!accessToken) {
@@ -75,7 +75,7 @@ export default async (req: express.Request, res: express.Response, next: express
           APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'Un-authorized', null);
           return;
         }
-        
+
         // Set new access token in response header
         res.setHeader('x-access-token', newAccessToken);
 

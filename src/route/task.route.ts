@@ -1,6 +1,7 @@
 import express from 'express';
 import userMiddleware from '../middleware/user.middleware';
 import {
+  addEstimatedTimeHandler,
   createTaskHandler,
   deleteAttachmentHandler,
   deleteTaskHandler,
@@ -8,10 +9,14 @@ import {
   getAttachmentHandler,
   getTaskByIdHandler,
   getTaskByStatusIdHandler,
+  getTimerStatusHandler,
   getUpcomingDeadlineTasksHandler,
+  startTimerHandler,
+  stopTimerHandler,
   updateTaskHandler,
   uploadAttachmentHandler,
 } from '../controller/task.controller';
+import { TimerBackgroundService } from '../cron/timetracking.cron';
 import multer from 'multer';
 const upload = multer();
 const taskRouter = express.Router();
@@ -22,10 +27,16 @@ taskRouter.post('/duplicate-task', duplicateTaskHandler);
 taskRouter.post('/get-task', getTaskByStatusIdHandler);
 taskRouter.get('/upcoming-deadlines', getUpcomingDeadlineTasksHandler);
 taskRouter.get('/get-task/:id', getTaskByIdHandler);
+taskRouter.put('/add-estimated-time', addEstimatedTimeHandler);
+taskRouter.put('/start-timer/:id', startTimerHandler);
+taskRouter.put('/stop-timer/:id', stopTimerHandler);
+taskRouter.get('/time-tracking/timer-status/:id', getTimerStatusHandler);
 taskRouter.put('/update-task', updateTaskHandler);
 taskRouter.delete('/delete-task/:id', deleteTaskHandler);
 taskRouter.post('/attachment', upload.array('attachment', 10), uploadAttachmentHandler);
 taskRouter.delete('/delete-attachment', deleteAttachmentHandler);
 taskRouter.get('/get-attachment', getAttachmentHandler);
+
+TimerBackgroundService.startBackgroundCheck();
 
 export default taskRouter;

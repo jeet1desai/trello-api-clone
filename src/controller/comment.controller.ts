@@ -191,7 +191,7 @@ export const deleteCommentHandler = async (req: Request, res: Response, next: Ne
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
-          link: `/board/${updatedComment.task_id.board_id.toString()}?task_id=${updatedComment.task_id._id.toString()}`
+          link: `/board/${updatedComment.task_id.board_id.toString()}?task_id=${updatedComment.task_id._id.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });

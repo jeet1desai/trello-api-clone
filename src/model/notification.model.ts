@@ -33,8 +33,8 @@ const schema = new mongoose.Schema<NotificationModelType>(
     },
     link: {
       type: String,
-      default: "",
-    }
+      default: '',
+    },
   },
   { timestamps: true }
 );
