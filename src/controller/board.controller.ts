@@ -946,6 +946,12 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
   try {
     const { boardId } = req.params;
 
+    const board = await BoardModel.findById(boardId);
+    if (!board) {
+      APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found');
+      return;
+    }
+
     const tasks = await TaskModel.find({ board_id: boardId }).populate({
       path: 'assigned_to',
       select: '_id first_name last_name',
@@ -996,6 +1002,10 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
         spendHours: Math.round(user.actualHours * 100) / 100,
         estimatedHours: Math.round(user.estimatedHours * 100) / 100,
       })),
+      board: {
+        backgroundType: board.backgroundType,
+        background: board.background,
+      },
     };
 
     APIResponse(res, true, HttpStatusCode.OK, 'Analytics fetched successfully', response);
