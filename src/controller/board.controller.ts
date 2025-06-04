@@ -596,7 +596,8 @@ export const getBoardsController = async (req: express.Request, res: express.Res
   try {
     // @ts-expect-error
     const user = req.user;
-    const { page = '1', perPage = '12', search = '', sortType = SORT_TYPE.CreatedDateDesc } = req.query || {};
+    const { page = '1', perPage = '12', search = '', sortType = SORT_TYPE.CreatedDateDesc, all = 'false' } = req.query || {};
+    const isGetAll = all === 'true';
 
     const parsedPage = Number(page) || 1;
     const parsedLimit = Number(perPage) || 12;
@@ -615,11 +616,18 @@ export const getBoardsController = async (req: express.Request, res: express.Res
     // Create base pipeline
     const pipeline = getBoardListQuery(user._id.toString(), search as string, sortOption);
 
-    // Paginated pipeline
-    const paginatedPipeline = [...pipeline, { $skip: skip }, { $limit: limit }];
+    // Use pagination only if 'all' is not true
+    const finalPipeline = isGetAll ? pipeline : [...pipeline, { $skip: skip }, { $limit: limit }];
 
     // Execute paginated query
-    const boards = await BoardModel.aggregate(paginatedPipeline);
+    const boards = await BoardModel.aggregate(finalPipeline);
+
+    // If all is requested, skip pagination metadata
+    if (isGetAll) {
+      APIResponse(res, true, HttpStatusCode.OK, 'All boards successfully fetched', {
+        boards,
+      });
+    }
 
     // Get total count for pagination (same filter logic but no skip/limit)
     const countPipeline = [...pipeline, { $count: 'total' }];
