@@ -20,7 +20,7 @@ const runStandardMiddleware = (app: Express) => {
   app.use(helmet());
   app.use(
     cors({
-      origin: ['http://localhost:3000'],
+      origin: ['http://localhost:3000', process.env.BOARD_FE_URL!],
       credentials: true,
     })
   );
