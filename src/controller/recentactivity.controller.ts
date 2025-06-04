@@ -44,17 +44,17 @@ export const getUserRecentActivitiesHandler = async (req: express.Request, res: 
 
 export const getUserActivitiesByUserIdHandler = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const { userId } = req.params;
+    const { userId, boardId } = req.params;
     const { skip, limit, page } = getPagination(req.query);
 
     // Validate user ID
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid user ID');
+    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(boardId)) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid IDs provided');
       return;
     }
 
     const query = {
-      $or: [{ created_by: userId }, { visible_to: userId }],
+      $and: [{ created_by: userId }, { board: boardId }],
     };
 
     const [activities, total] = await Promise.all([
