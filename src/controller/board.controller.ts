@@ -805,7 +805,7 @@ export const updateFavoriteStatus = async (req: express.Request, res: express.Re
     const { boardId } = req.params;
     const { isFavorite } = req.body;
     // @ts-expect-error
-    const userId = req.user._id; // assuming you're using a middleware that sets req.user
+    const userId = req.user._id;
 
     if (!mongoose.Types.ObjectId.isValid(boardId)) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid board ID');
@@ -1012,6 +1012,158 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const getBoardStats = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const { boardId } = req.query;
+    // @ts-expect-error
+    const userId = req.user._id;
+
+    if (boardId) {
+      // Fetch data for a specific board
+      const board = await BoardModel.findById(boardId);
+      if (!board) {
+        APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Board not found');
+        return;
+      }
+
+      const totalUsers = await MemberModel.countDocuments({ boardId });
+      const tasks = await TaskModel.find({ board_id: boardId });
+      const totalSpentHours = tasks.reduce((acc, task) => acc + (task.actual_time_spent || 0) / (1000 * 60 * 60), 0);
+      const totalTicketsClosed = tasks.filter((task) => task.status === 'Completed').length;
+      const totalActiveTickets = tasks.filter((task) => task.status !== 'Completed').length;
+
+      const boardMembers = await MemberModel.find({ boardId })
+        .populate('memberId', 'first_name last_name email createdAt')
+        .populate('boardId', 'name');
+
+      const teamMembers = await Promise.all(
+        boardMembers.map(async (member: any) => {
+          const memberTasks = await TaskModel.find({ board_id: boardId, assigned_to: member.memberId._id });
+
+          const spentHours = memberTasks.reduce((acc, task) => acc + (task.actual_time_spent || 0) / (1000 * 60 * 60), 0);
+          const ticketsClosed = memberTasks.filter((task) => task.status === 'Completed').length;
+          const activeTickets = memberTasks.filter((task) => task.status !== 'Completed').length;
+
+          return {
+            name: `${member.memberId.first_name} ${member.memberId.last_name}`,
+            email: member.memberId.email,
+            joined: member.memberId.createdAt,
+            boardName: member.boardId.name,
+            spentHours: Math.round(spentHours * 10) / 10,
+            ticketsClosed,
+            activeTickets,
+          };
+        })
+      );
+
+      const userTicketsCompleted = teamMembers.map((member) => ({
+        name: member.name,
+        ticketsClosed: member.ticketsClosed,
+      }));
+
+      const mostTicketsCompleted = userTicketsCompleted.reduce((prev, current) => (prev.ticketsClosed > current.ticketsClosed ? prev : current));
+
+      const response = {
+        overview: {
+          totalUsers,
+          totalSpentHours: Math.round(totalSpentHours * 10) / 10,
+          totalTicketsClosed,
+          totalActiveTickets,
+          mostTicketsCompletedBy: mostTicketsCompleted.name,
+          mostTicketsCompletedCount: mostTicketsCompleted.ticketsClosed,
+        },
+        teamMembers,
+      };
+
+      APIResponse(res, true, HttpStatusCode.OK, 'Board statistics fetched successfully', response);
+    } else {
+      // Fetch data for all boards the user is part of and aggregate the data
+      const userBoards = await MemberModel.find({ memberId: userId }).populate('boardId', '_id name');
+
+      let totalUsers = 0;
+      let totalSpentHours = 0;
+      let totalTicketsClosed = 0;
+      let totalActiveTickets = 0;
+      let allTeamMembers: any[] = [];
+      let userTicketsCompletedMap: any = {};
+
+      await Promise.all(
+        userBoards.map(async (userBoard: any) => {
+          const boardId = userBoard.boardId._id;
+          const boardName = userBoard.boardId.name;
+
+          const usersInBoard = await MemberModel.countDocuments({ boardId });
+          const tasks = await TaskModel.find({ board_id: boardId });
+          const spentHours = tasks.reduce((acc, task) => acc + (task.actual_time_spent || 0) / (1000 * 60 * 60), 0);
+          const ticketsClosed = tasks.filter((task) => task.status === 'Completed').length;
+          const activeTickets = tasks.filter((task) => task.status !== 'Completed').length;
+
+          totalUsers += usersInBoard;
+          totalSpentHours += spentHours;
+          totalTicketsClosed += ticketsClosed;
+          totalActiveTickets += activeTickets;
+
+          const boardMembers = await MemberModel.find({ boardId }).populate('memberId', 'first_name last_name email createdAt');
+
+          const teamMembers = await Promise.all(
+            boardMembers.map(async (member: any) => {
+              const memberTasks = await TaskModel.find({ board_id: boardId, assigned_to: member.memberId?._id });
+
+              const memberSpentHours = memberTasks.reduce((acc, task) => acc + (task.actual_time_spent || 0) / (1000 * 60 * 60), 0);
+              const memberTicketsClosed = memberTasks.filter((task) => task.status === 'Completed').length;
+              const memberActiveTickets = memberTasks.filter((task) => task.status !== 'Completed').length;
+
+              const memberName = `${member.memberId.first_name} ${member.memberId.last_name}`;
+
+              if (!userTicketsCompletedMap[memberName]) {
+                userTicketsCompletedMap[memberName] = 0;
+              }
+              userTicketsCompletedMap[memberName] += memberTicketsClosed;
+
+              return {
+                name: memberName,
+                email: member.memberId.email,
+                joined: member.memberId.createdAt,
+                boardName,
+                spentHours: Math.round(memberSpentHours * 10) / 10,
+                ticketsClosed: memberTicketsClosed,
+                activeTickets: memberActiveTickets,
+              };
+            })
+          );
+
+          allTeamMembers = [...allTeamMembers, ...teamMembers];
+        })
+      );
+
+      const userTicketsCompleted = Object.keys(userTicketsCompletedMap).map((name) => ({
+        name,
+        ticketsClosed: userTicketsCompletedMap[name],
+      }));
+
+      const mostTicketsCompleted = userTicketsCompleted.reduce((prev, current) => (prev.ticketsClosed > current.ticketsClosed ? prev : current));
+
+      const response = {
+        overview: {
+          totalUsers,
+          totalSpentHours: Math.round(totalSpentHours * 10) / 10,
+          totalTicketsClosed,
+          totalActiveTickets,
+          mostTicketsCompletedBy: mostTicketsCompleted.name,
+          mostTicketsCompletedCount: mostTicketsCompleted.ticketsClosed,
+        },
+        teamMembers: allTeamMembers,
+      };
+
+      APIResponse(res, true, HttpStatusCode.OK, 'Statistics for all user boards fetched successfully', response);
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, error.message);
     }
   }
 };
