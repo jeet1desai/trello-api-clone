@@ -902,7 +902,7 @@ export const startTimerHandler = async (req: Request, res: Response, next: NextF
     }
 
     if (task?.timer_status === 'completed') {
-      const totalEstimatedMs = (task.estimated_hours * 60 * 60 * 1000) + (task.estimated_minutes * 60 * 1000);
+      const totalEstimatedMs = task.estimated_hours * 60 * 60 * 1000 + task.estimated_minutes * 60 * 1000;
 
       if (totalEstimatedMs <= (task.actual_time_spent || 0)) {
         APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Cannot start timer. Estimated time must be greater than actual time spent.');
