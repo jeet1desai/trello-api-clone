@@ -910,7 +910,7 @@ export const startTimerHandler = async (req: Request, res: Response, next: NextF
     }
 
     if (task?.timer_status === 'completed') {
-      const totalEstimatedMs = (task.estimated_hours * 60 * 60 * 1000) + (task.estimated_minutes * 60 * 1000);
+      const totalEstimatedMs = task.estimated_hours * 60 * 60 * 1000 + task.estimated_minutes * 60 * 1000;
 
       if (totalEstimatedMs <= (task.actual_time_spent || 0)) {
         APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Cannot start timer. Estimated time must be greater than actual time spent.');
@@ -1086,6 +1086,8 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
         board_id: board_id,
         created_by: user._id,
         position: nextPosition,
+        estimated_hours: 0,
+        estimated_minutes: 0,
       });
 
       const { io } = getSocket();
@@ -1132,7 +1134,7 @@ export const exportTasks = async (req: Request, res: Response) => {
     const filePath = await exportTasksCSVByBoardId(boardId);
     const fileName = path.basename(filePath);
     res.download(filePath, fileName);
-} catch (err) {
+  } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
