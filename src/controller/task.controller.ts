@@ -21,7 +21,7 @@ import { saveRecentActivity } from '../helper/recentActivityService';
 import { parseCSVBuffer } from '../utils/parseCSVBuffer';
 import { taskRowSchema } from '../schemas/taskrow.schema';
 import { StatusModel } from '../model/status.model';
-import { createObjectCsvWriter } from 'csv-writer';
+import { createObjectCsvStringifier } from 'csv-writer';
 import { BoardModel } from '../model/board.model';
 import path from 'path';
 import fs from 'fs';
@@ -1133,9 +1133,11 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
 export const exportTasks = async (req: Request, res: Response) => {
   try {
     const boardId = req.params.boardId;
-    const filePath = await exportTasksCSVByBoardId(boardId);
-    const fileName = path.basename(filePath);
-    res.download(filePath, fileName);
+    const { csv, boardName } = await exportTasksCSVByBoardId(boardId);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${boardName.replace(/\s+/g, '_')}.csv"`);
+
+    res.send(csv);
   } catch (err) {
     if (err instanceof Error) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
@@ -1143,7 +1145,7 @@ export const exportTasks = async (req: Request, res: Response) => {
   }
 };
 
-export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> => {
+export const exportTasksCSVByBoardId = async (boardId: string): Promise<{ csv: string; boardName: string }> => {
   const board = await BoardModel.findById(boardId);
   if (!board) throw new Error('Board not found');
 
@@ -1197,13 +1199,7 @@ export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> 
     };
   });
 
-  const fileName = `${board?.name?.replace(/\s+/g, '_')}.csv`;
-  const exportDir = path.resolve('exports');
-  fs.mkdirSync(exportDir, { recursive: true });
-  const filePath = path.join(exportDir, fileName);
-
-  const csvWriter = createObjectCsvWriter({
-    path: filePath,
+  const csvStringifier = createObjectCsvStringifier({
     header: [
       { id: 'Title', title: 'Title' },
       { id: 'Description', title: 'Description' },
@@ -1220,6 +1216,11 @@ export const exportTasksCSVByBoardId = async (boardId: string): Promise<string> 
     ],
   });
 
-  await csvWriter.writeRecords(records);
-  return filePath;
+  const header = csvStringifier.getHeaderString();
+  const body = csvStringifier.stringifyRecords(records);
+
+  return {
+    csv: header + body,
+    boardName: board.name || 'board',
+  };
 };
