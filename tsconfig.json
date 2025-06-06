@@ -6,8 +6,9 @@
     "esModuleInterop": true,
     "outDir": "dist",
     "resolveJsonModule": true,
-    "types": ["node", "mocha"]
+    "types": ["node", "mocha"],
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": ["src/**/*", "test"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts", "tests"]
 }

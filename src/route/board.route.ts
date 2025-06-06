@@ -11,6 +11,7 @@ import {
   boardBackgrounds,
   updateBoardBackground,
   getBoardAnalytics,
+  getBoardStats,
 } from '../controller/board.controller';
 
 const router = express.Router();
@@ -26,5 +27,6 @@ router.put('/favorite/:boardId', updateFavoriteStatus);
 router.get('/backgrounds', boardBackgrounds);
 router.put('/update-background', updateBoardBackground);
 router.get('/analytics/:boardId', getBoardAnalytics);
+router.get('/dashboard/state', getBoardStats);
 
 export default router;

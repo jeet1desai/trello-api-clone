@@ -16,6 +16,7 @@ import dashboardRouter from './dashboard.route';
 import contactUsRouter from './contactUs.route';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
+import { url } from 'inspector';
 const BASE_PATH = '/v1/api';
 
 export default (app: Application) => {
@@ -28,7 +29,7 @@ export default (app: Application) => {
       },
       servers: [
         {
-          url: 'http://localhost:3000/v1/api',
+          url: `${process.env.BOARD_API_URL!}/v1/api`,
         },
       ],
     },
