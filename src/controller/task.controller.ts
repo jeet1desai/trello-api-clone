@@ -76,7 +76,15 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     const members = await MemberModel.find({ boardId: board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
-    await saveRecentActivity(user._id.toString(), 'Created', 'Task', board_id, visibleUserIds, `Task "${title}" was created by ${user.first_name}`);
+    await saveRecentActivity(
+      user._id.toString(),
+      'Created',
+      'Task',
+      board_id,
+      visibleUserIds,
+      `Task "${title}" was created by ${user.first_name}`,
+      newTask._id.toString()
+    );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
   } catch (err) {
@@ -452,7 +460,8 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
       'Task',
       movingTask?.board_id?.toString() ?? '',
       visibleUserIds,
-      `Task was udpated by ${user.first_name}`
+      `Task was updated by ${user.first_name}`,
+      movingTask._id.toString()
     );
 
     APIResponse(res, true, 200, message, !updated ? movingTask : updatedtData1);
@@ -489,7 +498,8 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       'Task',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `Task was deleted by ${user.first_name}`
+      `Task was deleted by ${user.first_name}`,
+      taskExist._id.toString()
     );
     APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', tasks);
   } catch (err) {
@@ -570,7 +580,8 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       'Attachment',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `Attachment has been uploaded by ${user.first_name}`
+      `Attachment has been uploaded by ${user.first_name}`,
+      taskExist._id.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
@@ -634,7 +645,8 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       'Attachment',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `Attachment has been deleted by ${user.first_name}`
+      `Attachment has been deleted by ${user.first_name}`,
+      taskExist._id.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted', updateAttachment);
@@ -748,7 +760,8 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
       'Task',
       originalTask.board_id?.toString() ?? '',
       visibleUserIds,
-      `Task "${originalTask.title}" was duplicated by ${user.first_name}`
+      `Task "${originalTask.title}" was duplicated by ${user.first_name}`,
+      savedTask._id.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully duplicated', savedTask);

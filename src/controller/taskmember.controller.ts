@@ -76,7 +76,8 @@ export const addTaskMemberHandler = async (req: Request, res: Response, next: Ne
       'Task Member',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `"${memberName}" has been added in Task ${taskExist.title} by ${user.first_name}`
+      `"${memberName}" has been added in Task ${taskExist.title} by ${user.first_name}`,
+      taskMembers?.task_id?._id?.toString() ?? ''
     );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task member successfully joined', taskMembers);
@@ -155,7 +156,8 @@ export const assignTaskMemberHandler = async (req: Request, res: Response, next:
       'Assign Member',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `"${memberName}" has been assigned to Task ${taskExist.title} by ${user.first_name}`
+      `"${memberName}" has been assigned to Task ${taskExist.title} by ${user.first_name}`,
+      taskExist._id.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Member successfully assigned to task', assignedMember);
@@ -224,7 +226,8 @@ export const unassignTaskMemberHandler = async (req: Request, res: Response, nex
       'Assigned Member',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `A member has been unassigned from Task ${taskExist.title} by ${user.first_name}`
+      `A member has been unassigned from Task ${taskExist.title} by ${user.first_name}`,
+      taskExist._id.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Member successfully unassigned from task');
@@ -304,7 +307,8 @@ export const deleteTaskMemberHandler = async (req: Request, res: Response, next:
       'Task Member',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `"${memberName}" has been removed from Task ${taskExist?.title} by ${user.first_name}`
+      `"${memberName}" has been removed from Task ${taskExist?.title} by ${user.first_name}`,
+      taskExist?._id?.toString() ?? ''
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Task member successfully removed', taksMember);

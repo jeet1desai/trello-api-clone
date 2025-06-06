@@ -69,6 +69,10 @@ export const getUserActivitiesByUserIdHandler = async (req: express.Request, res
         .populate({
           path: 'board',
           select: '_id name',
+        })
+        .populate({
+          path: 'task',
+          select: '_id title',
         }),
       RecentActivityModel.countDocuments(query),
     ]);
