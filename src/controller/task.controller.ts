@@ -3,7 +3,7 @@ import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode, TaskStatus } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { TaskModel } from '../model/task.model';
 import { addEstimatedTimeSchema, attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
@@ -18,6 +18,14 @@ import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
 import { MemberModel } from '../model/members.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
+import { parseCSVBuffer } from '../utils/parseCSVBuffer';
+import { taskRowSchema } from '../schemas/taskrow.schema';
+import { StatusModel } from '../model/status.model';
+import { createObjectCsvStringifier } from 'csv-writer';
+import { BoardModel } from '../model/board.model';
+import path from 'path';
+import fs from 'fs';
+import { convert } from 'html-to-text';
 import { ActiveTimerModel } from '../model/activeTimer.model';
 
 type BaseQuery = {
@@ -696,6 +704,8 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
       position: 0,
       status: originalTask.status,
       attachment: originalTask.attachment,
+      estimated_hours: originalTask.estimated_hours,
+      estimated_minutes: originalTask.estimated_minutes,
     });
     const savedTask = await duplicatedTask.save();
 
@@ -1023,4 +1033,194 @@ export const getTimerStatusHandler = async (req: Request, res: Response, next: N
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
     }
   }
+};
+
+export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.file?.buffer) {
+      res.status(400).json({ success: false, message: 'CSV file is missing' });
+      return;
+    }
+
+    const tasks = await parseCSVBuffer(req.file.buffer);
+
+    const { board_id } = req.body;
+
+    for (const row of tasks) {
+      await taskRowSchema.validate(row);
+
+      //@ts-expect-error
+      const user = req?.user;
+
+      let status = await StatusModel.findOne({ name: row.status, board_id });
+      if (!status) {
+        const lastStatus = await StatusModel.findOne({ board_id }).sort('-position').exec();
+        const nextPositionStatus = lastStatus ? lastStatus.position + 1 : 1;
+
+        status = await StatusModel.create({
+          name: row.status,
+          board_id,
+          position: nextPositionStatus,
+        });
+        const { io } = getSocket();
+
+        if (io)
+          io.to(status?.board_id?.toString() ?? '').emit('receive_status', {
+            data: status,
+          });
+      }
+
+      const taskExist = await TaskModel.findOne({
+        title: row.title,
+        status_list_id: status?.id,
+        board_id: board_id,
+      });
+
+      if (taskExist) continue;
+
+      const lastTask = await TaskModel.findOne({ status_list_id: status?.id, board_id: board_id }).sort('-position').exec();
+
+      const nextPosition = lastTask ? lastTask.position + 1 : 1;
+
+      const newTask = await TaskModel.create({
+        title: row.title,
+        status_list_id: status?.id,
+        board_id: board_id,
+        created_by: user._id,
+        position: nextPosition,
+        estimated_hours: 0,
+        estimated_minutes: 0,
+      });
+
+      const { io } = getSocket();
+
+      if (io) {
+        io.to(newTask.board_id?.toString() ?? '').emit('receive-new-task', { data: newTask });
+      }
+
+      const members = await MemberModel.find({ boardId: board_id }).select('memberId');
+      const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+      await saveRecentActivity(
+        user._id.toString(),
+        'Created',
+        'Status',
+        board_id,
+        visibleUserIds,
+        `Status "${row.status}" has been created by ${user.first_name}`
+      );
+
+      await saveRecentActivity(
+        user._id.toString(),
+        'Created',
+        'Task',
+        board_id,
+        visibleUserIds,
+        `Task "${row.title}" was created by ${user.first_name}`
+      );
+    }
+
+    APIResponse(res, true, 201, 'Tasks imported successfully');
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+  }
+};
+
+export const exportTasks = async (req: Request, res: Response) => {
+  try {
+    const boardId = req.params.boardId;
+    const { csv, boardName } = await exportTasksCSVByBoardId(boardId);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${boardName.replace(/\s+/g, '_')}.csv"`);
+
+    res.send(csv);
+  } catch (err) {
+    if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    }
+  }
+};
+
+export const exportTasksCSVByBoardId = async (boardId: string): Promise<{ csv: string; boardName: string }> => {
+  const board = await BoardModel.findById(boardId);
+  if (!board) throw new Error('Board not found');
+
+  const tasks = await TaskModel.find({ board_id: boardId })
+    .populate('board_id', 'name')
+    .populate('status_list_id', 'name')
+    .populate('assigned_to', 'email')
+    .populate('created_by', 'email');
+
+  const taskIds = tasks.map((task) => task._id);
+
+  const [taskLabels, taskMembers] = await Promise.all([
+    TaskLabelModel.find({ task_id: { $in: taskIds } }).populate('label_id', 'name'),
+    TaskMemberModel.find({ task_id: { $in: taskIds } }).populate('member_id', 'first_name last_name'),
+  ]);
+
+  const labelsMap: Record<string, string[]> = {};
+  for (const label of taskLabels) {
+    const key = (label.task_id as Types.ObjectId).toString();
+    if (!labelsMap[key]) labelsMap[key] = [];
+    if (label.label_id && 'name' in label.label_id) {
+      labelsMap[key].push((label.label_id as any).name);
+    }
+  }
+
+  const membersMap: Record<string, string[]> = {};
+  for (const member of taskMembers) {
+    const key = (member.task_id as Types.ObjectId).toString();
+    if (!membersMap[key]) membersMap[key] = [];
+    if (member.member_id && 'first_name' in member.member_id) {
+      const user = member.member_id as any;
+      membersMap[key].push(`${user.first_name} ${user.last_name || ''}`.trim());
+    }
+  }
+
+  const records = tasks.map((task) => {
+    const id = task._id.toString();
+    return {
+      Title: task.title,
+      Description: convert(task?.description || '', { wordwrap: false }),
+      Board: (task.board_id as any)?.name || '',
+      StatusName: (task.status_list_id as any)?.name || '',
+      Priority: task.priority,
+      CreatedBy: (task.created_by as any)?.email,
+      AssignedTo: (task.assigned_to as any)?.email || '',
+      StartDate: task.start_date?.toISOString().split('T')[0] || '',
+      EndDate: task.end_date?.toISOString().split('T')[0] || '',
+      Status: task.status || '',
+      Labels: labelsMap[id]?.join('- ') || '',
+      Members: membersMap[id]?.join('- ') || '',
+    };
+  });
+
+  const csvStringifier = createObjectCsvStringifier({
+    header: [
+      { id: 'Title', title: 'Title' },
+      { id: 'Description', title: 'Description' },
+      { id: 'Board', title: 'Board' },
+      { id: 'StatusName', title: 'Status Name' },
+      { id: 'Priority', title: 'Priority' },
+      { id: 'CreatedBy', title: 'Created By' },
+      { id: 'AssignedTo', title: 'Assigned To' },
+      { id: 'StartDate', title: 'Start Date' },
+      { id: 'EndDate', title: 'End Date' },
+      { id: 'Status', title: 'Status' },
+      { id: 'Labels', title: 'Labels' },
+      { id: 'Members', title: 'Members' },
+    ],
+  });
+
+  const header = csvStringifier.getHeaderString();
+  const body = csvStringifier.stringifyRecords(records);
+
+  return {
+    csv: header + body,
+    boardName: board.name || 'board',
+  };
 };
