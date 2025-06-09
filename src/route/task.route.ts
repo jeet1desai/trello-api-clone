@@ -13,6 +13,7 @@ import {
   getTimerStatusHandler,
   getUpcomingDeadlineTasksHandler,
   importTasksFromCSV,
+  repeatTaskHandler,
   startTimerHandler,
   stopTimerHandler,
   updateTaskHandler,
@@ -21,12 +22,14 @@ import {
 import { TimerBackgroundService } from '../cron/timetracking.cron';
 import multer from 'multer';
 import { validateFileUpload } from '../middleware/validateCSVFile';
+import { RepeatTaskRunnerService } from '../cron/repeatTaskRunner.cron';
 const upload = multer();
 const taskRouter = express.Router();
 
 taskRouter.use(userMiddleware);
 taskRouter.post('/create-task', createTaskHandler);
 taskRouter.post('/duplicate-task', duplicateTaskHandler);
+taskRouter.post('/repeat-task', repeatTaskHandler);
 taskRouter.post('/get-task', getTaskByStatusIdHandler);
 taskRouter.get('/upcoming-deadlines', getUpcomingDeadlineTasksHandler);
 taskRouter.get('/get-task/:id', getTaskByIdHandler);
@@ -43,5 +46,6 @@ taskRouter.post('/import-csv', upload.single('file'), validateFileUpload, import
 taskRouter.get('/export-csv/:boardId', exportTasks);
 
 TimerBackgroundService.startBackgroundCheck();
+RepeatTaskRunnerService.startBackgroundCheck();
 
 export default taskRouter;

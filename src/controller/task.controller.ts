@@ -5,7 +5,7 @@ import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose, { Types } from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { addEstimatedTimeSchema, attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
+import { addEstimatedTimeSchema, attachmentSchema, createTaskSchema, duplicateTaskSchema, repeatTaskSchema } from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
@@ -27,6 +27,7 @@ import { convert } from 'html-to-text';
 import { ActiveTimerModel } from '../model/activeTimer.model';
 import User from '../model/user.model';
 import { sendNotificationToUsers } from './firebasenotification.controller';
+import { RepeatTaskModel } from '../model/repeatTask.model';
 
 type BaseQuery = {
   status_list_id: string;
@@ -493,11 +494,16 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       return;
     }
     const tasks = await TaskModel.findByIdAndDelete({ _id: id });
+    await TaskModel.findByIdAndDelete({ _id: id });
 
     const members = await MemberModel.find({ boardId: taskExist.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
-    await Promise.all([TaskLabelModel.deleteMany({ task_id: id }), TaskMemberModel.deleteMany({ task_id: id })]);
+    await Promise.all([
+      TaskLabelModel.deleteMany({ task_id: id }),
+      TaskMemberModel.deleteMany({ task_id: id }),
+      RepeatTaskModel.deleteMany({ task_id: id }),
+    ]);
 
     const { io } = getSocket();
     if (io)
@@ -777,6 +783,55 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
     );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully duplicated', savedTask);
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof mongoose.Error.CastError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid task ID');
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+    return next(err);
+  }
+};
+
+export const repeatTaskHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    await validateRequest(req.body, repeatTaskSchema);
+    // @ts-expect-error
+    const user = req?.user;
+    const { taskId, repeat_type, start_date, end_date } = req.body;
+
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+
+    const duplicate = await RepeatTaskModel.findOne({
+      task_id: taskId,
+      repeat_type,
+      $or: [
+        {
+          start_date: { $lte: endDate },
+          end_date: { $gte: startDate },
+        },
+      ],
+    });
+
+    if (duplicate) {
+      APIResponse(res, false, HttpStatusCode.CONFLICT, 'Repeat task already exists with overlapping dates and same repeat type');
+      return;
+    }
+
+    if (repeat_type && start_date && end_date) {
+      const repeatTask = await new RepeatTaskModel({
+        task_id: taskId,
+        repeat_type,
+        start_date,
+        end_date,
+        next_repeat_on: start_date,
+        created_by: user._id,
+      }).save();
+      APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully repeated', repeatTask);
+    }
   } catch (err) {
     if (err instanceof Joi.ValidationError) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);

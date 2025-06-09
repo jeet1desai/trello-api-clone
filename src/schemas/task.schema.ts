@@ -7,6 +7,28 @@ export const duplicateTaskSchema = Joi.object({
   }),
 });
 
+export const repeatTaskSchema = Joi.object({
+  taskId: Joi.string().required().trim().messages({
+    'string.empty': 'Task id is required',
+    'any.required': 'Task id is required',
+  }),
+  repeat_type: Joi.string().valid('daily', 'weekly', 'monthly').required().messages({
+    'any.only': 'Repeat type must be one of daily, weekly, or monthly',
+    'any.required': 'Repeat type is required',
+  }),
+
+  start_date: Joi.date().required().messages({
+    'date.base': 'Start date must be a valid date',
+    'any.required': 'Start date is required',
+  }),
+
+  end_date: Joi.date().greater(Joi.ref('start_date')).required().messages({
+    'date.base': 'End date must be a valid date',
+    'date.greater': 'End date must be after start date',
+    'any.required': 'End date is required',
+  }),
+});
+
 export const createTaskSchema = Joi.object({
   title: Joi.string().required().trim().messages({
     'string.empty': 'Title is required',
