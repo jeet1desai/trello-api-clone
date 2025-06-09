@@ -1,5 +1,4 @@
 import { Request, Response, RequestHandler, NextFunction } from 'express';
-import path from 'path';
 import APIResponse from '../helper/apiResponse';
 import User from '../model/user.model';
 import bcryptJS from 'bcryptjs';

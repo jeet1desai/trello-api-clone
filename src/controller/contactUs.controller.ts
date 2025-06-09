@@ -8,7 +8,6 @@ import { contactUsSchema } from '../schemas/contactUs.schema';
 import ContactUsModel from '../model/contactUs.model';
 import { sendEmail } from '../utils/sendEmail';
 import ejs from 'ejs';
-import path from 'path';
 
 const ContactUs: RequestHandler = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {

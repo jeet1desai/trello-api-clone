@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import path from 'path';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import Joi from 'joi';
