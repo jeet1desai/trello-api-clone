@@ -1,3 +1,4 @@
+import path from 'path';
 import { Joi } from 'celebrate';
 import { Request, Response, RequestHandler, NextFunction } from 'express';
 import APIResponse from '../helper/apiResponse';
@@ -19,7 +20,7 @@ const ContactUs: RequestHandler = async (request: Request, response: Response, n
       return;
     }
 
-    const templatePath = __dirname + '/../helper/email-templates/contact-us.ejs';
+    const templatePath = path.join(process.cwd(), 'email-templates', 'contact-us.ejs');
     const html = await ejs.renderFile(templatePath, {
       name: newContactUsRequest.name,
       description: newContactUsRequest.description,
