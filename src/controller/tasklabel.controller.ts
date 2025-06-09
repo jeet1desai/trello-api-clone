@@ -76,7 +76,8 @@ export const addTaskLabelHandler = async (req: Request, res: Response, next: Nex
       'Task Label',
       taskExist?.board_id?.toString() || '',
       visibleUserIds,
-      `Label has been added in Task ${taskExist.title} by ${user.first_name}`
+      `Label has been added in Task ${taskExist.title} by ${user.first_name}`,
+      taskLabel._id.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task label successfully added', taskLabel);
@@ -156,7 +157,8 @@ export const deleteTaskLabelHandler = async (req: Request, res: Response, next: 
       'Task Label',
       taskExist?.board_id?.toString() || '',
       visibleUserIds,
-      `Label has been delete in Task ${taskExist?.title} by ${user.first_name}`
+      `Label has been delete in Task ${taskExist?.title} by ${user.first_name}`,
+      taskLabel ? taskLabel._id.toString() : ''
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Task label successfully removed', taskLabel);

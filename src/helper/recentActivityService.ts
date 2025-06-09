@@ -8,7 +8,8 @@ export const saveRecentActivity = async (
   module: string,
   boardId: string,
   visibleToUserIds: string[],
-  details?: string
+  details?: string,
+  taskId?: string
 ) => {
   try {
     const activityData: any = {
@@ -22,14 +23,22 @@ export const saveRecentActivity = async (
     if (boardId) {
       activityData.board = boardId;
     }
+    if (taskId) {
+      activityData.task = taskId;
+    }
     const results = await RecentActivityModel.create(activityData);
 
     const activity = await RecentActivityModel.findOne({
       _id: results._id,
-    }).populate({
-      path: 'created_by',
-      select: '_id first_name middle_name last_name email profile_image',
-    });
+    })
+      .populate({
+        path: 'created_by',
+        select: '_id first_name middle_name last_name email profile_image',
+      })
+      .populate({
+        path: 'task',
+        select: '_id title',
+      });
 
     const { io } = getSocket();
 
