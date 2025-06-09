@@ -9,7 +9,7 @@ import { TaskMemberModel } from '../model/taskMember.model';
 
 export class RepeatTaskRunnerService {
   static startBackgroundCheck() {
-    cron.schedule('* * * * *', async () => {
+    cron.schedule('0 0 * * *', async () => {
       try {
         const today = new Date();
         today.setUTCHours(0, 0, 0, 0);
