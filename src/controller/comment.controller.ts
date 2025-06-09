@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
+import path from 'path';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { getSocket, users } from '../config/socketio.config';
+import { getSocket } from '../config/socketio.config';
 import { commentSchema, updateCommentSchema } from '../schemas/comment.schema';
 import { CommentModel } from '../model/comment.model';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
@@ -17,6 +18,7 @@ import { emitToUser } from '../utils/socket';
 import ejs from 'ejs';
 import { sendEmail } from '../utils/sendEmail';
 import User from '../model/user.model';
+import path from 'path';
 
 export const addCommentHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -86,7 +88,7 @@ export const addCommentHandler = async (req: Request, res: Response, next: NextF
     );
     const validMentionedMembers = mentionedMembersData.filter(Boolean);
     const taskUrl = `${process.env.BOARD_FE_URL}/board/${comments?.task_id.board_id}?task_id=${comments?.task_id._id}`;
-    const templatePath = __dirname + '/../helper/email-templates/mention-member.ejs';
+    const templatePath = path.join(process.cwd(), 'email-templates', 'mention-member.ejs');
     for (const validMember of validMentionedMembers) {
       const html = await ejs.renderFile(templatePath, {
         inviterName: `${user.first_name} ${user.last_name}`,
@@ -340,7 +342,7 @@ export const updateCommentHandler = async (req: Request, res: Response, next: Ne
     );
     const validMentionedMembers = mentionedMembersData.filter(Boolean);
     const taskUrl = `${process.env.BOARD_FE_URL}/board/${updatedComment.task_id.board_id}?task_id=${updatedComment.task_id._id}`;
-    const templatePath = __dirname + '/../helper/email-templates/mention-member.ejs';
+    const templatePath = path.join(process.cwd(), 'email-templates', 'mention-member.ejs');
     for (const validMember of validMentionedMembers) {
       const html = await ejs.renderFile(templatePath, {
         inviterName: `${user.first_name} ${user.last_name}`,

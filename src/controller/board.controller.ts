@@ -1,5 +1,6 @@
 import express from 'express';
 import Joi from 'joi';
+import path from 'path';
 import { validateRequest } from '../utils/validation.utils';
 import { createBoardSchema } from '../schemas/board.schema';
 import APIResponse from '../helper/apiResponse';
@@ -24,6 +25,7 @@ import { TaskLabelModel } from '../model/taskLabel.model';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { BoardBackgroundModel } from '../model/boardBackground.model';
 import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
+import path from 'path';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -572,7 +574,7 @@ export const sendBoardInviteEmail = async ({
   workspace: any;
   inviteId: string;
 }) => {
-  const templatePath = __dirname + '/../helper/email-templates/board-invite.ejs';
+  const templatePath = path.join(process.cwd(), 'email-templates', 'board-invite.ejs');
 
   const html = await ejs.renderFile(templatePath, {
     inviteeName: existingUser ? `${existingUser.first_name} ${existingUser.last_name}` : '',

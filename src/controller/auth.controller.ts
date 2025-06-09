@@ -1,4 +1,5 @@
 import { Request, Response, RequestHandler, NextFunction } from 'express';
+import path from 'path';
 import APIResponse from '../helper/apiResponse';
 import User from '../model/user.model';
 import bcryptJS from 'bcryptjs';
@@ -22,6 +23,7 @@ import ejs from 'ejs';
 import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 import { saveFileToCloud } from '../utils/cloudinaryFileUpload';
 import admin from '../config/firebaseAdmin';
+import path from 'path';
 
 export interface IUserInfo {
   first_name: string;
@@ -76,7 +78,7 @@ const Signup: RequestHandler = async (request: Request, response: Response, next
     await userCreated.save();
 
     const verifyUrl = `${process.env.FE_URL}/?token=${token}`;
-    const templatePath = __dirname + '/../helper/email-templates/verifyEmail.ejs';
+    const templatePath = path.join(process.cwd(), 'email-templates', 'verifyEmail.ejs');
     const html = await ejs.renderFile(templatePath, { link: verifyUrl });
 
     const mailOptions = {
@@ -221,7 +223,7 @@ export const VerifyEmail: RequestHandler = async (request: Request, response: Re
       await user.save();
 
       const verifyUrl = `${process.env.FE_URL}/?token=${newToken}`;
-      const templatePath = __dirname + '/../helper/email-templates/verifyEmail.ejs';
+      const templatePath = path.join(process.cwd(), 'email-templates', 'verifyEmail.ejs');
       const html = await ejs.renderFile(templatePath, { link: verifyUrl });
 
       await sendEmail({
@@ -251,7 +253,7 @@ const ForgotPassword: RequestHandler = async (request: Request, response: Respon
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000);
-    const templatePath = __dirname + '/../helper/email-templates/sendOTP.ejs';
+    const templatePath = path.join(process.cwd(), 'email-templates', 'sendOTP.ejs');
     const html = await ejs.renderFile(templatePath, { otp });
 
     const mailOptions = {
