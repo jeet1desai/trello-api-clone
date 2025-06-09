@@ -23,6 +23,7 @@ import ejs from 'ejs';
 import { COOKIE_OPTIONS, TOKEN_EXP } from '../config/app.config';
 import { saveFileToCloud } from '../utils/cloudinaryFileUpload';
 import admin from '../config/firebaseAdmin';
+import path from 'path';
 
 export interface IUserInfo {
   first_name: string;

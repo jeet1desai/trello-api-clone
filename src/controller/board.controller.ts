@@ -25,6 +25,7 @@ import { TaskLabelModel } from '../model/taskLabel.model';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { BoardBackgroundModel } from '../model/boardBackground.model';
 import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
+import path from 'path';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();

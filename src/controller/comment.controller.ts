@@ -18,6 +18,7 @@ import { emitToUser } from '../utils/socket';
 import ejs from 'ejs';
 import { sendEmail } from '../utils/sendEmail';
 import User from '../model/user.model';
+import path from 'path';
 
 export const addCommentHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
