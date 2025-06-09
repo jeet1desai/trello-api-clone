@@ -20,7 +20,7 @@ const schema = new mongoose.Schema<RecentActivityModelType>(
     board: { type: mongoose.Schema.Types.ObjectId, ref: 'boards', required: false },
     details: { type: String },
     visible_to: [{ type: mongoose.Schema.Types.ObjectId, ref: 'users' }],
-    task: { type: mongoose.Schema.Types.ObjectId, ref: 'task' },
+    task: { type: mongoose.Schema.Types.ObjectId, ref: 'task', required: false },
   },
   { timestamps: true }
 );

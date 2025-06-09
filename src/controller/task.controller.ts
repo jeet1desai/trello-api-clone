@@ -83,7 +83,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
       board_id,
       visibleUserIds,
       `Task "${title}" was created by ${user.first_name}`,
-      newTask._id.toString()
+      newTask?._id?.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully created', newTask);
@@ -499,7 +499,7 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
       `Task was deleted by ${user.first_name}`,
-      taskExist._id.toString()
+      taskExist?._id?.toString()
     );
     APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', tasks);
   } catch (err) {
@@ -581,7 +581,7 @@ export const uploadAttachmentHandler = async (req: Request, res: Response, next:
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
       `Attachment has been uploaded by ${user.first_name}`,
-      taskExist._id.toString()
+      taskExist?._id?.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully uploaded', updateAttachment);
@@ -633,7 +633,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
           action: 'invited',
           receiver: convertObjectId(member.member_id.toString()),
           sender: user,
-          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id.toString()}`,
+          link: `/board/${taskExist.board_id?.toString()}?task_id=${taskExist._id?.toString()}`,
         });
         emitToUser(io, member?.member_id.toString(), 'receive_notification', { data: notification });
       });
@@ -646,7 +646,7 @@ export const deleteAttachmentHandler = async (req: Request, res: Response, next:
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
       `Attachment has been deleted by ${user.first_name}`,
-      taskExist._id.toString()
+      taskExist?._id?.toString()
     );
 
     APIResponse(res, true, HttpStatusCode.OK, 'Attachment successfully deleted', updateAttachment);
