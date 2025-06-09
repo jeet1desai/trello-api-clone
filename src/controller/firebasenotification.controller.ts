@@ -45,3 +45,22 @@ export const saveFirebaseDeviceToken = async (req: Request, res: Response, next:
     return;
   }
 };
+
+export const sendNotificationToUsers = async (userIds: string[], title: string, body: string) => {
+  const messages = userIds.map((userId) => ({
+    notification: {
+      title,
+      body,
+    },
+    token: userId,
+  }));
+
+  try {
+    const responses = await Promise.all(messages.map(async (message) => await firebaseAdmin.messaging().send(message)));
+    console.log('Notification sent successfully');
+    return responses;
+  } catch (error) {
+    console.error('Error sending notification:', error);
+    return error;
+  }
+};

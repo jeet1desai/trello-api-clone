@@ -1,4 +1,4 @@
-import e, { Request, Response, RequestHandler, NextFunction } from 'express';
+import { Request, Response, RequestHandler, NextFunction } from 'express';
 import APIResponse from '../helper/apiResponse';
 import { HttpStatusCode, TaskStatus } from '../helper/enum';
 import Joi from 'joi';
@@ -12,7 +12,7 @@ import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
 import { emitToUser } from '../utils/socket';
 import { TaskMemberModel } from '../model/taskMember.model';
 import { NotificationModel } from '../model/notification.model';
-import { convertObjectId, MEMBER_ROLES } from '../config/app.config';
+import { convertObjectId } from '../config/app.config';
 import { getResourceType } from '../helper/getResourceType';
 import { TaskLabelModel } from '../model/taskLabel.model';
 import { CommentModel } from '../model/comment.model';
@@ -23,10 +23,10 @@ import { taskRowSchema } from '../schemas/taskrow.schema';
 import { StatusModel } from '../model/status.model';
 import { createObjectCsvStringifier } from 'csv-writer';
 import { BoardModel } from '../model/board.model';
-import path from 'path';
-import fs from 'fs';
 import { convert } from 'html-to-text';
 import { ActiveTimerModel } from '../model/activeTimer.model';
+import User from '../model/user.model';
+import { sendNotificationToUsers } from './firebasenotification.controller';
 
 type BaseQuery = {
   status_list_id: string;
@@ -435,16 +435,28 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
     }
 
     const { io } = getSocket();
-
-    if (io)
+    if (io) {
       io.to(movingTask.board_id?.toString() ?? '').emit('receive-updated-task', {
         data: !updated ? movingTask : updatedtData1,
       });
+    }
 
     const message = updated ? 'Task updated successfully' : 'Nothing to update';
 
     const members = await MemberModel.find({ boardId: movingTask.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
+
+    if (status === 'Completed') {
+      const users = await User.find({
+        _id: { $in: members.map((m: any) => m.memberId !== user._id.toString() && m.memberId.toString()) },
+        fpn_token: { $ne: null },
+      });
+      const tokens = users.map((user: any) => user.fpn_token).filter(Boolean);
+
+      if (tokens.length > 0) {
+        await sendNotificationToUsers(tokens, 'Task Completed', `Task "${movingTask.title}" has been completed by ${user.first_name}`);
+      }
+    }
 
     await saveRecentActivity(
       user._id.toString(),

@@ -13,6 +13,7 @@ import User from '../model/user.model';
 import { convertObjectId } from '../config/app.config';
 import { NotificationModel } from '../model/notification.model';
 import { saveRecentActivity } from '../helper/recentActivityService';
+import { sendNotificationToUsers } from './firebasenotification.controller';
 
 export const addTaskMemberHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -112,6 +113,9 @@ export const assignTaskMemberHandler = async (req: Request, res: Response, next:
     // Update the task with the assigned member
     await TaskModel.findByIdAndUpdate(task_id, { assigned_to: member_id });
 
+    const users = await User.find({ _id: { $in: [member_id] }, fpn_token: { $ne: null } });
+    const tokens = users.map((user) => user.fpn_token).filter(Boolean);
+
     // Also add to task members if not already there
     const taskMemberExist = await TaskMemberModel.findOne({ task_id, member_id });
     if (!taskMemberExist) {
@@ -128,10 +132,15 @@ export const assignTaskMemberHandler = async (req: Request, res: Response, next:
     };
 
     const { io } = getSocket();
-    if (io)
+    if (io) {
       io.to(taskExist.board_id?.toString() ?? '').emit('receive_task_assigned_member', {
         data: assignedMember,
       });
+    }
+
+    if (tokens.length > 0) {
+      sendNotificationToUsers(tokens, 'Task Assigned', `You have been assigned to task "${taskExist.title}"`);
+    }
 
     if (memberDetails._id.toString()) {
       const notification = await NotificationModel.create({

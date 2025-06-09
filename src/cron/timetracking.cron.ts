@@ -1,6 +1,9 @@
 import cron from 'node-cron';
 import { ActiveTimerModel } from '../model/activeTimer.model';
 import { TaskModel } from '../model/task.model';
+import User from '../model/user.model';
+import { sendNotificationToUsers } from '../controller/firebasenotification.controller';
+import { getSocket } from '../config/socketio.config';
 
 export class TimerBackgroundService {
   static startBackgroundCheck() {
@@ -15,31 +18,34 @@ export class TimerBackgroundService {
             const currentTime = new Date();
             const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
 
-            // Check if timer has exceeded estimated time
             if (elapsedTime >= task.total_estimated_time) {
-              // Update task
               task.actual_time_spent += elapsedTime;
               task.timer_start_time = null;
               task.is_timer_active = false;
               task.timer_status = 'completed';
 
-              // Add session to history
               task.timer_sessions.push({
                 start_time: activeTimer.start_time,
                 end_time: currentTime,
                 duration: elapsedTime,
               });
 
+              const users = await User.find({ _id: { $in: [task.assigned_to] }, fpn_token: { $ne: null } });
+              const tokens = users.map((user: any) => user.fpn_token).filter(Boolean);
+
+              if (tokens.length > 0) {
+                sendNotificationToUsers(tokens, 'Task Timer Stopped', `Your task timer has stopped - exceeded estimated time`);
+              }
+
               await task.save();
 
-              // Remove active timer
               await ActiveTimerModel.deleteOne({ _id: activeTimer._id });
 
-              // Here you could also emit a socket event to notify the user
-              // io.to(activeTimer.userId.toString()).emit('timerAutoStopped', {
-              //   taskId: task._id,
-              //   message: 'Timer automatically stopped - exceeded estimated time'
-              // });
+              const { io } = getSocket();
+              io?.to(activeTimer?.user_id?.toString() ?? '').emit('timerAutoStopped', {
+                taskId: task._id,
+                message: 'Timer automatically stopped - exceeded estimated time',
+              });
             }
           }
         }

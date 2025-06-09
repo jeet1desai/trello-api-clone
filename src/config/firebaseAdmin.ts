@@ -15,9 +15,19 @@ const serviceAccount = {
   universe_domain: process.env.FIREBASE_UNIVERSE_DOMAIN,
 };
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
-});
+// admin.initializeApp({
+//   credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+//   databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
+// });
+
+try {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+    databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`,
+  });
+  console.log('Firebase Admin SDK initialized successfully.');
+} catch (error) {
+  console.error('Error initializing Firebase Admin SDK:', error);
+}
 
 export default admin;
