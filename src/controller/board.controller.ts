@@ -25,6 +25,7 @@ import { TaskMemberModel } from '../model/taskMember.model';
 import { BoardBackgroundModel } from '../model/boardBackground.model';
 import { UserBoardBackgroundModel } from '../model/userBoardBackground.model';
 import path from 'path';
+import { RepeatTaskModel } from '../model/repeatTask.model';
 
 export const createBoardController = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const session = await mongoose.startSession();
@@ -320,6 +321,7 @@ export const deleteBoardController = async (req: express.Request, res: express.R
       BoardInviteModel.deleteMany({ boardId: id }, { session }),
       StatusModel.deleteMany({ board_id: id }, { session }),
       TaskModel.deleteMany({ board_id: id }, { session }),
+      RepeatTaskModel.deleteMany({ task_id: { $in: taskIds } }, { session }),
       TaskLabelModel.deleteMany({ task_id: { $in: taskIds } }, { session }),
       TaskMemberModel.deleteMany({ task_id: { $in: taskIds } }, { session }),
     ]);

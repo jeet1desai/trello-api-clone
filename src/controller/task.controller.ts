@@ -5,7 +5,14 @@ import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose, { Types } from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { addEstimatedTimeSchema, attachmentSchema, createTaskSchema, duplicateTaskSchema } from '../schemas/task.schema';
+import {
+  addEstimatedTimeSchema,
+  attachmentSchema,
+  createTaskSchema,
+  duplicateTaskSchema,
+  importTaskSchema,
+  repeatTaskSchema,
+} from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
@@ -27,6 +34,7 @@ import { convert } from 'html-to-text';
 import { ActiveTimerModel } from '../model/activeTimer.model';
 import User from '../model/user.model';
 import { sendNotificationToUsers } from './firebasenotification.controller';
+import { RepeatTaskModel } from '../model/repeatTask.model';
 
 type BaseQuery = {
   status_list_id: string;
@@ -493,11 +501,16 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       return;
     }
     const tasks = await TaskModel.findByIdAndDelete({ _id: id });
+    await TaskModel.findByIdAndDelete({ _id: id });
 
     const members = await MemberModel.find({ boardId: taskExist.board_id }).select('memberId');
     const visibleUserIds = members.map((m: any) => m.memberId.toString());
 
-    await Promise.all([TaskLabelModel.deleteMany({ task_id: id }), TaskMemberModel.deleteMany({ task_id: id })]);
+    await Promise.all([
+      TaskLabelModel.deleteMany({ task_id: id }),
+      TaskMemberModel.deleteMany({ task_id: id }),
+      RepeatTaskModel.deleteMany({ task_id: id }),
+    ]);
 
     const { io } = getSocket();
     if (io)
@@ -789,6 +802,61 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
   }
 };
 
+export const repeatTaskHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    await validateRequest(req.body, repeatTaskSchema);
+    // @ts-expect-error
+    const user = req?.user;
+    const { taskId, repeat_type, start_date, end_date } = req.body;
+
+    const task = await TaskModel.findOne({ _id: taskId });
+
+    if (task?.parent_task_id) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'Repeat task not creating from Follow-up task');
+      return;
+    }
+    const startDate = new Date(start_date);
+    const endDate = new Date(end_date);
+
+    const duplicate = await RepeatTaskModel.findOne({
+      task_id: taskId,
+      repeat_type,
+      $or: [
+        {
+          start_date: { $lte: endDate },
+          end_date: { $gte: startDate },
+        },
+      ],
+    });
+
+    if (duplicate) {
+      APIResponse(res, false, HttpStatusCode.CONFLICT, 'Repeat task already exists with overlapping dates and same repeat type');
+      return;
+    }
+
+    if (repeat_type && start_date && end_date) {
+      const repeatTask = await new RepeatTaskModel({
+        task_id: taskId,
+        repeat_type,
+        start_date,
+        end_date,
+        next_repeat_on: start_date,
+        created_by: user._id,
+      }).save();
+      APIResponse(res, true, HttpStatusCode.CREATED, 'Task successfully repeated', repeatTask);
+    }
+  } catch (err) {
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof mongoose.Error.CastError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Invalid task ID');
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
+    }
+    return next(err);
+  }
+};
+
 export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     //@ts-expect-error
@@ -1062,20 +1130,27 @@ export const getTimerStatusHandler = async (req: Request, res: Response, next: N
 
 export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    await validateRequest(req.body, importTaskSchema);
+    // @ts-expect-error
+    const user = req?.user;
+    const { board_id } = req.body;
+
     if (!req.file?.buffer) {
       res.status(400).json({ success: false, message: 'CSV file is missing' });
       return;
     }
 
-    const tasks = await parseCSVBuffer(req.file.buffer);
+    const requestingMember = await MemberModel.findOne({ boardId: board_id, memberId: user._id });
 
-    const { board_id } = req.body;
+    if (!requestingMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to import task');
+      return;
+    }
+
+    const tasks = await parseCSVBuffer(req.file.buffer);
 
     for (const row of tasks) {
       await taskRowSchema.validate(row);
-
-      //@ts-expect-error
-      const user = req?.user;
 
       let status = await StatusModel.findOne({ name: row.status, board_id });
       if (!status) {
@@ -1157,7 +1232,15 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
 
 export const exportTasks = async (req: Request, res: Response) => {
   try {
+    // @ts-expect-error
+    const user = req?.user;
     const boardId = req.params.boardId;
+    const requestingMember = await MemberModel.findOne({ boardId: boardId, memberId: user._id });
+
+    if (!requestingMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to import task');
+      return;
+    }
     const { csv, boardName } = await exportTasksCSVByBoardId(boardId);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${boardName.replace(/\s+/g, '_')}.csv"`);
