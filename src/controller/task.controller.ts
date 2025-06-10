@@ -498,7 +498,7 @@ export const deleteTaskHandler = async (req: Request, res: Response, next: NextF
       'Task',
       taskExist?.board_id?.toString() ?? '',
       visibleUserIds,
-      `Task was deleted by ${user.first_name}`,
+      `${taskExist.title} Task was deleted by ${user.first_name}`,
       taskExist?._id?.toString()
     );
     APIResponse(res, true, HttpStatusCode.OK, 'Task successfully deleted', tasks);
