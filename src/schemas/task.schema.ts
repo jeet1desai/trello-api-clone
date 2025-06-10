@@ -7,6 +7,13 @@ export const duplicateTaskSchema = Joi.object({
   }),
 });
 
+export const importTaskSchema = Joi.object({
+  board_id: Joi.string().required().trim().messages({
+    'string.empty': 'Board id is required',
+    'any.required': 'Board id is required',
+  }),
+});
+
 export const repeatTaskSchema = Joi.object({
   taskId: Joi.string().required().trim().messages({
     'string.empty': 'Task id is required',

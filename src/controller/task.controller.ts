@@ -5,7 +5,14 @@ import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose, { Types } from 'mongoose';
 import { TaskModel } from '../model/task.model';
-import { addEstimatedTimeSchema, attachmentSchema, createTaskSchema, duplicateTaskSchema, repeatTaskSchema } from '../schemas/task.schema';
+import {
+  addEstimatedTimeSchema,
+  attachmentSchema,
+  createTaskSchema,
+  duplicateTaskSchema,
+  importTaskSchema,
+  repeatTaskSchema,
+} from '../schemas/task.schema';
 import { getSocket } from '../config/socketio.config';
 import { deleteFromCloudinary } from '../utils/cloudinaryFileUpload';
 import { saveMultipleFilesToCloud } from '../helper/saveMultipleFiles';
@@ -1117,20 +1124,27 @@ export const getTimerStatusHandler = async (req: Request, res: Response, next: N
 
 export const importTasksFromCSV = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    await validateRequest(req.body, importTaskSchema);
+    // @ts-expect-error
+    const user = req?.user;
+    const { board_id } = req.body;
+
     if (!req.file?.buffer) {
       res.status(400).json({ success: false, message: 'CSV file is missing' });
       return;
     }
 
-    const tasks = await parseCSVBuffer(req.file.buffer);
+    const requestingMember = await MemberModel.findOne({ boardId: board_id, memberId: user._id });
 
-    const { board_id } = req.body;
+    if (!requestingMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to import task');
+      return;
+    }
+
+    const tasks = await parseCSVBuffer(req.file.buffer);
 
     for (const row of tasks) {
       await taskRowSchema.validate(row);
-
-      //@ts-expect-error
-      const user = req?.user;
 
       let status = await StatusModel.findOne({ name: row.status, board_id });
       if (!status) {
@@ -1212,7 +1226,15 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
 
 export const exportTasks = async (req: Request, res: Response) => {
   try {
+    // @ts-expect-error
+    const user = req?.user;
     const boardId = req.params.boardId;
+    const requestingMember = await MemberModel.findOne({ boardId: boardId, memberId: user._id });
+
+    if (!requestingMember) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to import task');
+      return;
+    }
     const { csv, boardName } = await exportTasksCSVByBoardId(boardId);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${boardName.replace(/\s+/g, '_')}.csv"`);
