@@ -31,6 +31,7 @@ export interface TaskModelType {
     duration: number;
   }[];
   timer_status: string;
+  parent_task_id: mongoose.Types.ObjectId;
 }
 
 const taskSchema = new mongoose.Schema<TaskModelType>(
@@ -130,6 +131,10 @@ const taskSchema = new mongoose.Schema<TaskModelType>(
       type: String,
       enum: ['pending', 'in-progress', 'completed'],
       default: 'pending',
+    },
+    parent_task_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
     },
   },
   { timestamps: true }

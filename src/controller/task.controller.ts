@@ -809,6 +809,12 @@ export const repeatTaskHandler = async (req: Request, res: Response, next: NextF
     const user = req?.user;
     const { taskId, repeat_type, start_date, end_date } = req.body;
 
+    const task = await TaskModel.findOne({ _id: taskId });
+
+    if (task?.parent_task_id) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'Repeat task not creating from Follow-up task');
+      return;
+    }
     const startDate = new Date(start_date);
     const endDate = new Date(end_date);
 

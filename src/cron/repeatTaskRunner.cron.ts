@@ -21,22 +21,19 @@ export class RepeatTaskRunnerService {
             $gte: today,
             $lt: tomorrow,
           },
-          end_date: {
-            $gte: today,
-            $lt: tomorrow,
-          },
         });
-
         for (const repeat of repeatTasks) {
           // Find the original task
           const originalTask = await TaskModel.findById(repeat.task_id).lean();
           if (!originalTask) {
+            console.log('Task not found');
             continue;
           }
 
           const requestingMember = await MemberModel.findOne({ boardId: originalTask.board_id, memberId: repeat.created_by });
 
           if (!requestingMember) {
+            console.log('You do not have permission to repeat task');
             continue;
           }
 
@@ -56,6 +53,7 @@ export class RepeatTaskRunnerService {
             attachment: originalTask.attachment,
             estimated_hours: originalTask.estimated_hours,
             estimated_minutes: originalTask.estimated_minutes,
+            parent_task_id: originalTask._id,
           });
           const savedTask = await repeatedTask.save();
 
@@ -103,7 +101,6 @@ export class RepeatTaskRunnerService {
 
           // Compute next repeat date
           const nextDate = getNextRepeatDate(repeat.repeat_type, today);
-
           if (nextDate > repeat.end_date) {
             await RepeatTaskModel.findByIdAndDelete(repeat._id);
           } else {
@@ -111,7 +108,7 @@ export class RepeatTaskRunnerService {
           }
         }
       } catch (error) {
-        console.error('Error in repeat task check:', error);
+        console.log('Error in repeat task check:', error);
       }
     });
   }
