@@ -45,16 +45,18 @@ export const convertObjectId = (id: string): mongoose.Types.ObjectId => {
 };
 
 export const getSortOption = (sortType: SORT_TYPE): Record<string, 1 | -1> => {
+  const baseSort: Record<string, 1 | -1> = { isFavorite: -1 }; // favourites first
+
   switch (sortType) {
     case SORT_TYPE.NameAsc:
-      return { name: 1 };
+      return { ...baseSort, name: 1 };
     case SORT_TYPE.NameDesc:
-      return { name: -1 };
+      return { ...baseSort, name: -1 };
     case SORT_TYPE.CreatedDateAsc:
-      return { createdAt: 1 };
+      return { ...baseSort, createdAt: 1 };
     case SORT_TYPE.CreatedDateDesc:
-      return { createdAt: -1 };
+      return { ...baseSort, createdAt: -1 };
     default:
-      return { createdAt: -1 }; // fallback
+      return { ...baseSort, createdAt: -1 }; // fallback
   }
 };
