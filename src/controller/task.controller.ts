@@ -808,6 +808,12 @@ export const repeatTaskHandler = async (req: Request, res: Response, next: NextF
     // @ts-expect-error
     const user = req?.user;
     const { taskId, repeat_type, start_date, end_date } = req.body;
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    if (new Date(start_date).toISOString().split('T')[0] === today.toISOString().split('T')[0]) {
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'Start date cannot be today.');
+    }
 
     const task = await TaskModel.findOne({ _id: taskId });
 
