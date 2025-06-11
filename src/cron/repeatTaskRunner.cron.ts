@@ -26,14 +26,12 @@ export class RepeatTaskRunnerService {
           // Find the original task
           const originalTask = await TaskModel.findById(repeat.task_id).lean();
           if (!originalTask) {
-            console.log('Task not found');
             continue;
           }
 
           const requestingMember = await MemberModel.findOne({ boardId: originalTask.board_id, memberId: repeat.created_by });
 
           if (!requestingMember) {
-            console.log('You do not have permission to repeat task');
             continue;
           }
 
@@ -108,7 +106,7 @@ export class RepeatTaskRunnerService {
           }
         }
       } catch (error) {
-        console.log('Error in repeat task check:', error);
+        console.error('Error in repeat task check:', error);
       }
     });
   }

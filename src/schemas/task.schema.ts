@@ -14,6 +14,14 @@ export const importTaskSchema = Joi.object({
   }),
 });
 
+export const getTaskSuggestionsSchema = Joi.object({
+  boardId: Joi.string().required().trim().messages({
+    'string.empty': 'Board id is required',
+    'any.required': 'Board id is required',
+  }),
+  taskId: Joi.string().optional().trim(),
+});
+
 export const repeatTaskSchema = Joi.object({
   taskId: Joi.string().required().trim().messages({
     'string.empty': 'Task id is required',

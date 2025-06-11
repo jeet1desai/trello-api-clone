@@ -10,6 +10,7 @@ import {
   attachmentSchema,
   createTaskSchema,
   duplicateTaskSchema,
+  getTaskSuggestionsSchema,
   importTaskSchema,
   repeatTaskSchema,
 } from '../schemas/task.schema';
@@ -32,6 +33,10 @@ import { createObjectCsvStringifier } from 'csv-writer';
 import { BoardModel } from '../model/board.model';
 import { convert } from 'html-to-text';
 import { ActiveTimerModel } from '../model/activeTimer.model';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from 'dotenv';
+
+dotenv.config();
 import User from '../model/user.model';
 import { sendNotificationToUsers } from './firebasenotification.controller';
 import { RepeatTaskModel } from '../model/repeatTask.model';
@@ -1236,6 +1241,127 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
   }
 };
 
+export const getTaskSuggestionsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await validateRequest(req.body, getTaskSuggestionsSchema);
+
+    const { boardId, taskId } = req.body;
+
+    if (!boardId) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Board ID is required');
+      return;
+    }
+
+    let prompt = '';
+
+    if (taskId) {
+      const currentTask = await TaskModel.findById(taskId).select('title description').lean();
+
+      if (!currentTask) {
+        APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'Task not found');
+        return;
+      }
+
+      const similarTasks = await TaskModel.find({
+        board_id: boardId,
+        _id: { $ne: taskId },
+        $or: [
+          { title: new RegExp(currentTask?.title?.split(' ')[0] ?? '', 'i') },
+          { description: currentTask.description ? new RegExp(currentTask.description.split(' ').slice(0, 3).join('|'), 'i') : null },
+        ].filter(Boolean),
+      })
+        .sort({ completedAt: -1 })
+        .limit(10)
+        .select('title description')
+        .lean();
+
+      prompt = `The user is working on a task titled: "${currentTask.title}"${currentTask.description ? ` with description: "${currentTask.description}"` : ''}.
+        Based on the following similar tasks, suggest 3-5 relevant subtasks that would help break down and complete this task more effectively:
+        Similar tasks: ${similarTasks.map((task, i) => `Task ${i + 1}: ${task.title}${task.description ? ` - ${task.description}` : ''}`).join('\n')}
+        Please provide the suggestions in the following JSON format:
+        {
+          "suggestions": [
+            {"title": "Subtask 1 title", "description": "Brief description of the subtask"},
+            ...
+          ]
+        }`;
+    } else {
+      const recentTasks = await TaskModel.find({
+        board_id: boardId,
+        createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
+      })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .select('title description')
+        .lean();
+
+      const completedTasks = await TaskModel.find({
+        board_id: boardId,
+        status: TaskStatus.COMPLETED,
+        completedAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
+      })
+        .sort({ completedAt: -1 })
+        .limit(30)
+        .select('title description')
+        .lean();
+
+      const allTasks = [...recentTasks, ...completedTasks].reduce((unique: any[], task: any) => {
+        if (!unique.some((t) => t._id.toString() === task._id.toString())) {
+          unique.push(task);
+        }
+        return unique;
+      }, []);
+
+      if (allTasks.length === 0) {
+        APIResponse(res, true, HttpStatusCode.OK, 'No recent tasks found for suggestions', []);
+        return;
+      }
+
+      prompt = `Based on the following recent tasks, suggest 3-5 new task ideas that are relevant and similar in nature.
+        Recent tasks: ${allTasks.map((task, index) => `Task ${index + 1}: ${task.title}${task.description ? ` - ${task.description}` : ''}`).join('\n')}
+        Please provide suggestions in the following JSON format:
+        {
+          "suggestions": [
+            {"title": "Suggested task title", "description": "Brief description of the task"},
+            ...
+          ]
+        }`;
+    }
+
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GOOGLE_API_KEY || '');
+      const model = genAI.getGenerativeModel({ model: 'gemma-3n-e4b-it' });
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      try {
+        const jsonStart = text.indexOf('{');
+        const jsonEnd = text.lastIndexOf('}') + 1;
+        const jsonString = text.substring(jsonStart, jsonEnd).trim();
+        const response = JSON.parse(jsonString);
+
+        APIResponse(res, true, HttpStatusCode.OK, 'Task suggestions generated', response.suggestions);
+        return;
+      } catch (parseError) {
+        console.error('Error parsing response:', parseError);
+        APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, 'Failed to parse task suggestions');
+        return;
+      }
+    } catch (aiError) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, 'Failed to generate task suggestions');
+      return;
+    }
+  } catch (error) {
+    if (error instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, error.details[0].message);
+    } else if (error instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, error.message);
+    }
+  }
+};
+
 export const exportTasks = async (req: Request, res: Response) => {
   try {
     // @ts-expect-error
@@ -1244,24 +1370,28 @@ export const exportTasks = async (req: Request, res: Response) => {
     const requestingMember = await MemberModel.findOne({ boardId: boardId, memberId: user._id });
 
     if (!requestingMember) {
-      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to import task');
+      APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to export tasks');
       return;
     }
+
     const { csv, boardName } = await exportTasksCSVByBoardId(boardId);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${boardName.replace(/\s+/g, '_')}.csv"`);
-
     res.send(csv);
   } catch (err) {
-    if (err instanceof Error) {
-      APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, err.message);
+    if (err instanceof Joi.ValidationError) {
+      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, err.details[0].message);
+    } else if (err instanceof Error) {
+      APIResponse(res, false, HttpStatusCode.INTERNAL_SERVER_ERROR, err.message);
     }
   }
 };
 
 export const exportTasksCSVByBoardId = async (boardId: string): Promise<{ csv: string; boardName: string }> => {
   const board = await BoardModel.findById(boardId);
-  if (!board) throw new Error('Board not found');
+  if (!board) {
+    throw new Error('Board not found');
+  }
 
   const tasks = await TaskModel.find({ board_id: boardId })
     .populate('board_id', 'name')
