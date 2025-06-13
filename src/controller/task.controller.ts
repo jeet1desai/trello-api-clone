@@ -922,7 +922,14 @@ export const startTimerHandler = async (req: Request, res: Response, next: NextF
 
     const existingActiveTimer = await ActiveTimerModel.findOne({ user_id: user._id });
     if (existingActiveTimer) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'You already have an active timer running. Please stop it before starting a new one.');
+      const data = { taskId: existingActiveTimer.task_id, boardId: task.board_id };
+      APIResponse(
+        res,
+        false,
+        HttpStatusCode.BAD_REQUEST,
+        'You already have an active timer running. Please stop it before starting a new one.',
+        data
+      );
       return;
     }
 
