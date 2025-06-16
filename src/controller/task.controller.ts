@@ -231,7 +231,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const tasks = await TaskModel.find(query)
       .sort({ position: 1 })
       .select(
-        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes actual_time_spent timer_start_time is_timer_active '
+        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes actual_time_spent timer_start_time is_timer_active total_estimated_time timer_status'
       )
       .populate({
         path: 'status_list_id',
