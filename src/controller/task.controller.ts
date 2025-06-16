@@ -243,7 +243,9 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
 
     const tasks = await TaskModel.find(query)
       .sort({ position: 1 })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
+      .select(
+        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes actual_time_spent timer_start_time is_timer_active total_estimated_time timer_status'
+      )
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -1011,7 +1013,14 @@ export const startTimerHandler = async (req: Request, res: Response, next: NextF
 
     const existingActiveTimer = await ActiveTimerModel.findOne({ user_id: user._id });
     if (existingActiveTimer) {
-      APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'You already have an active timer running. Please stop it before starting a new one.');
+      const data = { taskId: existingActiveTimer.task_id, boardId: task.board_id };
+      APIResponse(
+        res,
+        false,
+        HttpStatusCode.BAD_REQUEST,
+        'You already have an active timer running. Please stop it before starting a new one.',
+        data
+      );
       return;
     }
 
