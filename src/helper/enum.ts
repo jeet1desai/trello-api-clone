@@ -21,9 +21,9 @@ export enum Priority {
 }
 
 export enum TaskType {
-  FEATURE = 'FEATURE',
-  SUBTASK = 'SUBTASK',
-  BUG = 'BUG',
+  FEATURE = 'Feature',
+  SUBTASK = 'Subtask',
+  BUG = 'Bug',
 }
 
 export enum TaskStatus {
