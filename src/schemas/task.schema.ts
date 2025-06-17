@@ -57,6 +57,9 @@ export const createTaskSchema = Joi.object({
     'string.empty': 'Status id is required',
     'any.required': 'Status id is required',
   }),
+  task_type: Joi.string().valid('FEATURE', 'SUBTASK', 'BUG').optional().messages({
+    'any.only': 'Task type must be one of FEATURE, SUBTASK, or BUG',
+  }),
 });
 
 export const addTaskMemberSchema = Joi.object({

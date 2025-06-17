@@ -1,6 +1,6 @@
 import { Request, Response, RequestHandler, NextFunction } from 'express';
 import APIResponse from '../helper/apiResponse';
-import { HttpStatusCode, TaskStatus } from '../helper/enum';
+import { HttpStatusCode, TaskStatus, TaskType } from '../helper/enum';
 import Joi from 'joi';
 import { validateRequest } from '../utils/validation.utils';
 import mongoose, { Types } from 'mongoose';
@@ -51,6 +51,7 @@ type FilterQuery = BaseQuery & {
   status?: string;
   end_date?: { $ne: null } | null | { $lt: Date; $ne: null } | { $gte: Date; $lt: Date; $ne: null };
   _id?: { $in: string[] } | { $nin: string[] };
+  task_type?: string;
 };
 
 export const createTaskHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -58,7 +59,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
     await validateRequest(req.body, createTaskSchema);
     // @ts-expect-error
     const user = req?.user;
-    const { title, status_list_id, board_id } = req.body;
+    const { title, status_list_id, board_id, task_type } = req.body;
     const taskExist = await TaskModel.findOne({ title, status_list_id, board_id });
     if (taskExist) {
       APIResponse(res, false, HttpStatusCode.BAD_REQUEST, 'Task already exists..!');
@@ -78,6 +79,7 @@ export const createTaskHandler = async (req: Request, res: Response, next: NextF
       estimated_hours: 0,
       estimated_minutes: 0,
       total_estimated_time: 0,
+      task_type: task_type || TaskType.FEATURE,
     });
 
     const { io } = getSocket();
@@ -111,7 +113,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const user = req?.user;
     const currentUserId = user._id;
 
-    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds, hasMember } = req.body;
+    const { statusId, filterBy: filterByRaw, markAsDone, hasDueDate, hasOverDue, dueTimeframe, labelIds, hasMember, taskType } = req.body;
 
     if (!statusId || typeof statusId !== 'string' || !statusId.trim()) {
       APIResponse(res, false, HttpStatusCode.BAD_GATEWAY, "Missing or invalid 'statusId' parameter.");
@@ -146,6 +148,11 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     // Add filter for markAsDone if provided
     if (markAsDone && markAsDone !== undefined) {
       query.status = markAsDone === true ? TaskStatus.COMPLETED : TaskStatus.INCOMPLETE;
+    }
+
+    // Add filter for task type if provided
+    if (taskType && taskType !== undefined) {
+      query.task_type = taskType;
     }
 
     // Add filter for due date presence if provided
@@ -244,7 +251,7 @@ export const getTaskByStatusIdHandler = async (req: Request, res: Response, next
     const tasks = await TaskModel.find(query)
       .sort({ position: 1 })
       .select(
-        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes actual_time_spent timer_start_time is_timer_active total_estimated_time timer_status'
+        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes actual_time_spent timer_start_time is_timer_active total_estimated_time timer_status task_type'
       )
       .populate({
         path: 'status_list_id',
@@ -294,7 +301,7 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
     const { id } = req.params;
     const tasks = await TaskModel.findById({ _id: id })
       .select(
-        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes total_estimated_time actual_time_spent timer_start_time is_timer_active timer_status timer_sessions parent_task_id'
+        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to estimated_hours estimated_minutes total_estimated_time actual_time_spent timer_start_time is_timer_active timer_status timer_sessions parent_task_id task_type'
       )
       .populate({
         path: 'status_list_id',
@@ -333,7 +340,7 @@ export const getTaskByIdHandler = async (req: Request, res: Response, next: Next
 
 export const updateTaskHandler: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { taskId, newPosition, title, description, status_list_id, status, start_date, end_date, priority } = req.body;
+    const { taskId, newPosition, title, description, status_list_id, status, start_date, end_date, priority, task_type } = req.body;
     // @ts-expect-error
     const user = req?.user;
 
@@ -380,6 +387,11 @@ export const updateTaskHandler: RequestHandler = async (req: Request, res: Respo
 
     if (priority) {
       movingTask.priority = priority;
+      updated = true;
+    }
+
+    if (task_type) {
+      movingTask.task_type = task_type;
       updated = true;
     }
 
@@ -750,6 +762,7 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
       attachment: originalTask.attachment,
       estimated_hours: originalTask.estimated_hours,
       estimated_minutes: originalTask.estimated_minutes,
+      task_type: originalTask.task_type,
     });
     const savedTask = await duplicatedTask.save();
 
@@ -901,7 +914,7 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
 
     const tasks = await TaskModel.find(query)
       .sort({ end_date: 1 })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to')
+      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to task_type')
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',
@@ -1161,7 +1174,6 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
     }
 
     const requestingMember = await MemberModel.findOne({ boardId: board_id, memberId: user._id });
-
     if (!requestingMember) {
       APIResponse(res, false, HttpStatusCode.FORBIDDEN, 'You do not have permission to import task');
       return;
@@ -1210,6 +1222,7 @@ export const importTasksFromCSV = async (req: Request, res: Response, next: Next
         position: nextPosition,
         estimated_hours: 0,
         estimated_minutes: 0,
+        task_type: row?.type || TaskType.FEATURE,
       });
 
       const { io } = getSocket();

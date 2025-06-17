@@ -52,6 +52,7 @@ export class RepeatTaskRunnerService {
             estimated_hours: originalTask.estimated_hours,
             estimated_minutes: originalTask.estimated_minutes,
             parent_task_id: originalTask._id,
+            task_type: originalTask.task_type,
           });
           const savedTask = await repeatedTask.save();
 

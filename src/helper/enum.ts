@@ -20,6 +20,12 @@ export enum Priority {
   CRITICAL = 'Critical',
 }
 
+export enum TaskType {
+  FEATURE = 'FEATURE',
+  SUBTASK = 'SUBTASK',
+  BUG = 'BUG',
+}
+
 export enum TaskStatus {
   COMPLETED = 'Completed',
   INCOMPLETE = 'Incomplete',

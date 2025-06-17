@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Priority, TaskStatus } from '../helper/enum';
+import { Priority, TaskStatus, TaskType } from '../helper/enum';
 
 export interface TaskModelType {
   _id?: mongoose.Schema.Types.ObjectId;
@@ -32,6 +32,7 @@ export interface TaskModelType {
   }[];
   timer_status: string;
   parent_task_id: mongoose.Types.ObjectId;
+  task_type: TaskType;
 }
 
 const taskSchema = new mongoose.Schema<TaskModelType>(
@@ -44,6 +45,11 @@ const taskSchema = new mongoose.Schema<TaskModelType>(
     description: {
       type: String,
       default: '',
+    },
+    task_type: {
+      type: String,
+      enum: Object.values(TaskType),
+      default: TaskType.FEATURE,
     },
     attachment: [
       {
@@ -81,7 +87,7 @@ const taskSchema = new mongoose.Schema<TaskModelType>(
     priority: {
       type: String,
       enum: Object.values(Priority),
-      default: 'Medium',
+      default: Priority.MEDIUM,
     },
     position: {
       type: Number,
