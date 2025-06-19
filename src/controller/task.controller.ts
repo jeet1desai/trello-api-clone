@@ -760,8 +760,8 @@ export const duplicateTaskHandler = async (req: Request, res: Response, next: Ne
       position: 0,
       status: originalTask.status,
       attachment: originalTask.attachment,
-      estimated_hours: originalTask.estimated_hours,
-      estimated_minutes: originalTask.estimated_minutes,
+      estimated_hours: 0,
+      estimated_minutes: 0,
       task_type: originalTask.task_type,
     });
     const savedTask = await duplicatedTask.save();
