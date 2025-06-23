@@ -71,6 +71,10 @@ export const updateInvitationDetailController = async (req: express.Request, res
       APIResponse(res, false, HttpStatusCode.NOT_FOUND, 'User not found for the given invitation');
       return;
     }
+    if (invitation.email !== user.email) {
+      APIResponse(res, false, HttpStatusCode.UNAUTHORIZED, 'You are not authorized to accept this invitation');
+      return;
+    }
 
     if (status === MEMBER_INVITE_STATUS.COMPLETED) {
       const existingMember = await MemberModel.findOne({
