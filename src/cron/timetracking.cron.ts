@@ -8,50 +8,57 @@ import { getSocket } from '../config/socketio.config';
 export class TimerBackgroundService {
   static startBackgroundCheck() {
     // Run every minute to check for overtime timers
-    cron.schedule('* * * * *', async () => {
-      try {
-        const activeTimers = await ActiveTimerModel.find().populate('task_id');
+    cron.schedule(
+      '* * * * *',
+      async () => {
+        try {
+          const activeTimers = await ActiveTimerModel.find().populate('task_id');
 
-        for (const activeTimer of activeTimers) {
-          const task = await TaskModel.findById(activeTimer.task_id);
-          if (task) {
-            const currentTime = new Date();
-            const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
+          for (const activeTimer of activeTimers) {
+            const task = await TaskModel.findById(activeTimer.task_id);
+            if (task) {
+              const currentTime = new Date();
+              const estimatedMs = task.total_estimated_time;
+              const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
 
-            if (elapsedTime >= task.total_estimated_time) {
-              task.actual_time_spent += elapsedTime;
-              task.timer_start_time = null;
-              task.is_timer_active = false;
-              task.timer_status = 'completed';
+              if (elapsedTime >= estimatedMs) {
+                task.actual_time_spent += elapsedTime;
+                task.timer_start_time = null;
+                task.is_timer_active = false;
+                task.timer_status = 'completed';
 
-              task.timer_sessions.push({
-                start_time: activeTimer.start_time,
-                end_time: currentTime,
-                duration: elapsedTime,
-              });
+                task.timer_sessions.push({
+                  start_time: activeTimer.start_time,
+                  end_time: currentTime,
+                  duration: elapsedTime,
+                });
 
-              const users = await User.find({ _id: { $in: [task.assigned_to] }, fpn_token: { $ne: null } });
-              const tokens = users.map((user: any) => user.fpn_token).filter(Boolean);
+                const users = await User.find({ _id: { $in: [task.assigned_to] }, fpn_token: { $ne: null } });
+                const tokens = users.map((user: any) => user.fpn_token).filter(Boolean);
 
-              if (tokens.length > 0) {
-                sendNotificationToUsers(tokens, 'Task Timer Stopped', `Your task timer has stopped - exceeded estimated time`);
+                if (tokens.length > 0) {
+                  sendNotificationToUsers(tokens, 'Task Timer Stopped', `Your task timer has stopped - exceeded estimated time`);
+                }
+
+                await task.save();
+
+                await ActiveTimerModel.deleteOne({ _id: activeTimer._id });
+
+                const { io } = getSocket();
+                io?.to(activeTimer?.user_id?.toString() ?? '').emit('timerAutoStopped', {
+                  taskId: task._id,
+                  message: 'Timer automatically stopped - exceeded estimated time',
+                });
               }
-
-              await task.save();
-
-              await ActiveTimerModel.deleteOne({ _id: activeTimer._id });
-
-              const { io } = getSocket();
-              io?.to(activeTimer?.user_id?.toString() ?? '').emit('timerAutoStopped', {
-                taskId: task._id,
-                message: 'Timer automatically stopped - exceeded estimated time',
-              });
             }
           }
+        } catch (error) {
+          console.error('Error in background timer check:', error);
         }
-      } catch (error) {
-        console.error('Error in background timer check:', error);
+      },
+      {
+        timezone: 'Asia/Kolkata',
       }
-    });
+    );
   }
 }
