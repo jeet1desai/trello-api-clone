@@ -979,6 +979,7 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
           userId,
           name: userName,
           completedTasks: 0,
+          totalTasks: 0,
           spendHours: 0,
           estimatedHours: 0,
           actualHours: 0,
@@ -988,6 +989,7 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
       const userStats = userAnalytics.get(userId)!;
       userStats.estimatedHours += (task.total_estimated_time || 0) / (1000 * 60 * 60);
       userStats.actualHours += (task.actual_time_spent || 0) / (1000 * 60 * 60);
+      userStats.totalTasks += 1;
       if (task.status === 'Completed') {
         userStats.completedTasks += 1;
       }
@@ -1010,6 +1012,8 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
       usersList: usersList.map((user) => ({
         name: user.name,
         completedTasks: user.completedTasks,
+        totalTasks: user.totalTasks,
+        
         spendHours: Math.round(user.actualHours * 100) / 100,
         estimatedHours: Math.round(user.estimatedHours * 100) / 100,
       })),
