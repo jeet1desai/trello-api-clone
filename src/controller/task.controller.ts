@@ -914,7 +914,9 @@ export const getUpcomingDeadlineTasksHandler = async (req: Request, res: Respons
 
     const tasks = await TaskModel.find(query)
       .sort({ end_date: 1 })
-      .select('_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to task_type')
+      .select(
+        '_id title description attachment board_id status_list_id created_by position status start_date end_date priority assigned_to task_type'
+      )
       .populate({
         path: 'status_list_id',
         select: '_id name description board_id',

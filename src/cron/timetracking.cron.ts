@@ -17,12 +17,12 @@ export class TimerBackgroundService {
           for (const activeTimer of activeTimers) {
             const task = await TaskModel.findById(activeTimer.task_id);
             if (task) {
-              const currentTime = new Date();
               const estimatedMs = task.total_estimated_time;
+              const currentTime = new Date(new Date().toUTCString());
               const elapsedTime = currentTime.getTime() - activeTimer.start_time.getTime();
 
-              if (elapsedTime >= estimatedMs) {
-                task.actual_time_spent += elapsedTime;
+              if (elapsedTime + task.actual_time_spent >= estimatedMs) {
+                task.actual_time_spent = task.total_estimated_time;
                 task.timer_start_time = null;
                 task.is_timer_active = false;
                 task.timer_status = 'completed';

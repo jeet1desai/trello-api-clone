@@ -178,10 +178,10 @@ export const updateBoardController = async (req: express.Request, res: express.R
         const existingUser = await User.findOne({ email });
         const isAlreadyMember = existingUser
           ? await MemberModel.exists({
-              memberId: convertObjectId(existingUser._id.toString()),
-              boardId: convertObjectId(board._id.toString()),
-              workspaceId: convertObjectId(workspace._id.toString()),
-            })
+            memberId: convertObjectId(existingUser._id.toString()),
+            boardId: convertObjectId(board._id.toString()),
+            workspaceId: convertObjectId(workspace._id.toString()),
+          })
           : false;
 
         if (isAlreadyMember) continue;
@@ -781,12 +781,12 @@ const getBoardListQuery = (userId: string, search: string, sortOption: Record<st
     // Apply search filter if provided
     ...(search
       ? [
-          {
-            $match: {
-              $or: [{ name: { $regex: safeSearch, $options: 'i' } }],
-            },
+        {
+          $match: {
+            $or: [{ name: { $regex: safeSearch, $options: 'i' } }],
           },
-        ]
+        },
+      ]
       : []),
 
     // Sort
@@ -1013,7 +1013,6 @@ export const getBoardAnalytics = async (req: express.Request, res: express.Respo
         name: user.name,
         completedTasks: user.completedTasks,
         totalTasks: user.totalTasks,
-        
         spendHours: Math.round(user.actualHours * 100) / 100,
         estimatedHours: Math.round(user.estimatedHours * 100) / 100,
       })),
